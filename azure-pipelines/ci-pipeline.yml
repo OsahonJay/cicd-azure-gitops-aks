@@ -80,11 +80,12 @@ stages:
               path: $(Pipeline.Workspace)/.pip-cache
 
           - script: |
-              pip install checkov==3.2.0 --quiet \
+              pip3 install checkov==3.2.0 --quiet \
                 --cache-dir $(Pipeline.Workspace)/.pip-cache
             displayName: "Install Checkov"
 
           - script: |
+              export PATH="$HOME/.local/bin:$PATH"
               # Print findings to the pipeline log (CLI output)
               checkov \
                 --directory k8s/ \
@@ -131,11 +132,12 @@ stages:
               path: $(Pipeline.Workspace)/.pip-cache
 
           - script: |
-              pip install semgrep==1.72.0 --quiet \
+              pip3 install semgrep==1.72.0 --quiet \
                 --cache-dir $(Pipeline.Workspace)/.pip-cache
             displayName: "Install Semgrep"
 
           - script: |
+              export PATH="$HOME/.local/bin:$PATH"
               semgrep \
                 --config=auto \
                 microservices/ \
@@ -156,9 +158,8 @@ stages:
   # Fix: azureSubscription uses the YAML variable (not the secret UI
   # variable) so AzureCLI@2 can resolve connectedServiceNameARM.
   # Trivy is installed natively so its SARIF lands on the agent FS.
-  # QEMU is required: AKS node is ARM64; images must be linux/arm64.
-  # dotnet uses --platform=$BUILDPLATFORM in its Dockerfile so the SDK
-  # stage runs natively on the amd64 agent — avoiding QEMU segfault.
+  # QEMU is required on amd64 agents to build linux/arm64 images.
+  # On native ARM64 agents QEMU is skipped (uname -m == aarch64).
   # ============================================================
   - stage: Build_Python
     displayName: "Build · Scan · Push — python-app"
@@ -182,7 +183,11 @@ stages:
                 az acr login --name $(ACR_NAME)
 
           - script: |
-              docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+              if [ "$(uname -m)" != "aarch64" ]; then
+                docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+              else
+                echo "ARM64 agent — QEMU not needed for linux/arm64 builds"
+              fi
             displayName: "Set up QEMU for ARM64 cross-compilation"
 
           - script: |
@@ -194,9 +199,15 @@ stages:
 
           - script: |
               TRIVY_VERSION="0.50.4"
-              echo "Downloading Trivy v${TRIVY_VERSION} (direct binary)..."
+              ARCH=$(uname -m)
+              if [ "${ARCH}" = "aarch64" ]; then
+                TRIVY_ARCH="Linux-ARM64"
+              else
+                TRIVY_ARCH="Linux-64bit"
+              fi
+              echo "Downloading Trivy v${TRIVY_VERSION} for ${TRIVY_ARCH}..."
               curl -sSL \
-                "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" \
+                "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_${TRIVY_ARCH}.tar.gz" \
                 | tar -xz -C /usr/local/bin trivy 2>/dev/null \
                 || echo "Binary extraction failed — CVE scan will be skipped"
             displayName: "Install Trivy"
@@ -253,7 +264,11 @@ stages:
                 az acr login --name $(ACR_NAME)
 
           - script: |
-              docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+              if [ "$(uname -m)" != "aarch64" ]; then
+                docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+              else
+                echo "ARM64 agent — QEMU not needed for linux/arm64 builds"
+              fi
             displayName: "Set up QEMU for ARM64 cross-compilation"
 
           - script: |
@@ -265,9 +280,15 @@ stages:
 
           - script: |
               TRIVY_VERSION="0.50.4"
-              echo "Downloading Trivy v${TRIVY_VERSION} (direct binary)..."
+              ARCH=$(uname -m)
+              if [ "${ARCH}" = "aarch64" ]; then
+                TRIVY_ARCH="Linux-ARM64"
+              else
+                TRIVY_ARCH="Linux-64bit"
+              fi
+              echo "Downloading Trivy v${TRIVY_VERSION} for ${TRIVY_ARCH}..."
               curl -sSL \
-                "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" \
+                "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_${TRIVY_ARCH}.tar.gz" \
                 | tar -xz -C /usr/local/bin trivy 2>/dev/null \
                 || echo "Binary extraction failed — CVE scan will be skipped"
             displayName: "Install Trivy"
@@ -324,7 +345,11 @@ stages:
                 az acr login --name $(ACR_NAME)
 
           - script: |
-              docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+              if [ "$(uname -m)" != "aarch64" ]; then
+                docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+              else
+                echo "ARM64 agent — QEMU not needed for linux/arm64 builds"
+              fi
             displayName: "Set up QEMU for ARM64 cross-compilation"
 
           - script: |
@@ -336,9 +361,15 @@ stages:
 
           - script: |
               TRIVY_VERSION="0.50.4"
-              echo "Downloading Trivy v${TRIVY_VERSION} (direct binary)..."
+              ARCH=$(uname -m)
+              if [ "${ARCH}" = "aarch64" ]; then
+                TRIVY_ARCH="Linux-ARM64"
+              else
+                TRIVY_ARCH="Linux-64bit"
+              fi
+              echo "Downloading Trivy v${TRIVY_VERSION} for ${TRIVY_ARCH}..."
               curl -sSL \
-                "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" \
+                "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_${TRIVY_ARCH}.tar.gz" \
                 | tar -xz -C /usr/local/bin trivy 2>/dev/null \
                 || echo "Binary extraction failed — CVE scan will be skipped"
             displayName: "Install Trivy"
