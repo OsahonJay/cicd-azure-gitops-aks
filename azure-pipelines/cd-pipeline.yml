@@ -191,3 +191,52 @@ stages:
               echo "=== Deployment summary ==="
               argocd app get microservices-app --insecure
             displayName: "Print deployment status"
+
+  # ============================================================
+  # STAGE 4 — DAST (OWASP ZAP)
+  # Runs a baseline scan against all three Ingress endpoints
+  # after ArgoCD confirms the deployment is healthy.
+  # continueOnError: findings are reported as artifacts but
+  # do not block promotion — the team reviews the SARIF report.
+  # ============================================================
+  - stage: DAST
+    displayName: "Gate 4 — DAST (OWASP ZAP)"
+    dependsOn: SyncArgoCD
+    continueOnError: true
+    jobs:
+      - job: ZAPScan
+        displayName: "Baseline scan — all three services via Ingress"
+        continueOnError: true
+        pool:
+          vmImage: "ubuntu-latest"
+        steps:
+          - script: |
+              INGRESS_IP="4.158.73.97"
+              REPORT_DIR="$(Build.SourcesDirectory)/zap-reports"
+              mkdir -p "${REPORT_DIR}"
+
+              for APP in python nodejs dotnet; do
+                TARGET="http://${INGRESS_IP}/${APP}/"
+                echo "=== ZAP baseline scan: ${TARGET} ==="
+
+                docker run --rm \
+                  -v "${REPORT_DIR}:/zap/wrk:rw" \
+                  ghcr.io/zaproxy/zaproxy:stable \
+                  zap-baseline.py \
+                    -t "${TARGET}" \
+                    -r "zap-${APP}.html" \
+                    -J "zap-${APP}.json" \
+                    -I \
+                  2>&1 | tee "${REPORT_DIR}/zap-${APP}-output.txt" || true
+
+                echo "Scan complete for ${APP}"
+              done
+
+              echo "=== ZAP scans finished — check artifacts for findings ==="
+            displayName: "Run ZAP baseline scan — python, nodejs, dotnet"
+
+          - task: PublishBuildArtifacts@1
+            condition: always()
+            inputs:
+              pathToPublish: "$(Build.SourcesDirectory)/zap-reports"
+              artifactName: "dast-zap-results"
