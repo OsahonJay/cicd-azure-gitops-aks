@@ -156,8 +156,9 @@ stages:
   # Fix: azureSubscription uses the YAML variable (not the secret UI
   # variable) so AzureCLI@2 can resolve connectedServiceNameARM.
   # Trivy is installed natively so its SARIF lands on the agent FS.
-  # Note: build target is amd64 (agent default) — AKS ARM64 node runs
-  # amd64 images transparently via hardware emulation.
+  # QEMU is required: AKS node is ARM64; images must be linux/arm64.
+  # dotnet uses --platform=$BUILDPLATFORM in its Dockerfile so the SDK
+  # stage runs natively on the amd64 agent — avoiding QEMU segfault.
   # ============================================================
   - stage: Build_Python
     displayName: "Build · Scan · Push — python-app"
@@ -181,16 +182,15 @@ stages:
                 az acr login --name $(ACR_NAME)
 
           - script: |
+              docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+            displayName: "Set up QEMU for ARM64 cross-compilation"
+
+          - script: |
               docker build \
+                --platform linux/arm64 \
                 -t python-app:$(IMAGE_TAG) \
                 microservices/python-app/
-            displayName: "Build Docker image"
-
-          - task: Cache@2
-            displayName: "Cache Trivy vulnerability DB"
-            inputs:
-              key: '"trivy-db" | "0.50.4"'
-              path: $(Pipeline.Workspace)/.trivy-cache
+            displayName: "Build Docker image (linux/arm64)"
 
           - script: |
               TRIVY_VERSION="0.50.4"
@@ -210,7 +210,6 @@ stages:
                   --ignore-unfixed \
                   --format sarif \
                   --output "$(Build.SourcesDirectory)/trivy-python.sarif" \
-                  --cache-dir $(Pipeline.Workspace)/.trivy-cache \
                   python-app:$(IMAGE_TAG) || true
               else
                 echo "Trivy not available — CVE scan skipped"
@@ -254,16 +253,15 @@ stages:
                 az acr login --name $(ACR_NAME)
 
           - script: |
+              docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+            displayName: "Set up QEMU for ARM64 cross-compilation"
+
+          - script: |
               docker build \
+                --platform linux/arm64 \
                 -t nodejs-app:$(IMAGE_TAG) \
                 microservices/nodejs-app/
-            displayName: "Build Docker image"
-
-          - task: Cache@2
-            displayName: "Cache Trivy vulnerability DB"
-            inputs:
-              key: '"trivy-db" | "0.50.4"'
-              path: $(Pipeline.Workspace)/.trivy-cache
+            displayName: "Build Docker image (linux/arm64)"
 
           - script: |
               TRIVY_VERSION="0.50.4"
@@ -283,7 +281,6 @@ stages:
                   --ignore-unfixed \
                   --format sarif \
                   --output "$(Build.SourcesDirectory)/trivy-nodejs.sarif" \
-                  --cache-dir $(Pipeline.Workspace)/.trivy-cache \
                   nodejs-app:$(IMAGE_TAG) || true
               else
                 echo "Trivy not available — CVE scan skipped"
@@ -327,16 +324,15 @@ stages:
                 az acr login --name $(ACR_NAME)
 
           - script: |
+              docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+            displayName: "Set up QEMU for ARM64 cross-compilation"
+
+          - script: |
               docker build \
+                --platform linux/arm64 \
                 -t dotnet-app:$(IMAGE_TAG) \
                 microservices/dotnet-app/
-            displayName: "Build Docker image"
-
-          - task: Cache@2
-            displayName: "Cache Trivy vulnerability DB"
-            inputs:
-              key: '"trivy-db" | "0.50.4"'
-              path: $(Pipeline.Workspace)/.trivy-cache
+            displayName: "Build Docker image (linux/arm64)"
 
           - script: |
               TRIVY_VERSION="0.50.4"
@@ -356,7 +352,6 @@ stages:
                   --ignore-unfixed \
                   --format sarif \
                   --output "$(Build.SourcesDirectory)/trivy-dotnet.sarif" \
-                  --cache-dir $(Pipeline.Workspace)/.trivy-cache \
                   dotnet-app:$(IMAGE_TAG) || true
               else
                 echo "Trivy not available — CVE scan skipped"
