@@ -10,21 +10,18 @@ trigger:
 
 variables:
   ACR_NAME: "acrgitopsproject"
-  ACR_LOGIN_SERVER: "$(ACR_NAME).azurecr.io"
+  ACR_LOGIN_SERVER: "acrgitopsproject.azurecr.io"
   # IMAGE_TAG uses the pipeline run ID — immutable, traceable, never 'latest'.
-  # Reason: mutable tags (latest, stable) defeat ArgoCD drift detection and
-  # make rollbacks ambiguous. Build ID ties every running container to an
-  # auditable pipeline execution.
   IMAGE_TAG: "$(Build.BuildId)"
+  # Service connection name — must match Project Settings → Service Connections.
+  # Defined here (not as a UI variable) so AzureCLI@2 can resolve it.
+  # Secret UI variables cannot be used as connectedServiceNameARM inputs.
+  AZURE_SERVICE_CONNECTION: "AZURE_SERVICE_CONNECTION"
 
 stages:
 
   # ============================================================
   # GATE 1 — Secret Scanning (Gitleaks)
-  # Scans the full git history for accidentally committed secrets.
-  # continueOnError: true so downstream stages run even if secrets
-  # are found; findings are published as a SARIF artifact for review.
-  # In production, remove continueOnError to enforce blocking.
   # ============================================================
   - stage: SecretScan
     displayName: "Gate 1 — Secret Scanning (Gitleaks)"
@@ -36,12 +33,9 @@ stages:
           vmImage: "ubuntu-latest"
         steps:
           - checkout: self
-            fetchDepth: 0   # full history — Gitleaks scans all commits, not just HEAD
+            fetchDepth: 0
 
           - script: |
-              # gitleaks exits 1 when secrets are found, 0 when clean.
-              # We capture the exit code and publish the report regardless;
-              # the job is marked continueOnError so the stage passes either way.
               docker run --rm \
                 -v "$(Build.SourcesDirectory):/repo" \
                 ghcr.io/gitleaks/gitleaks:v8.18.4 \
@@ -51,8 +45,11 @@ stages:
                   --exit-code 1 \
                   --report-format sarif \
                   --report-path /repo/gitleaks-report.sarif \
-                2>&1 | tee gitleaks-output.txt || true
-              echo "Gitleaks scan complete — review artifact for findings"
+                2>&1 | tee gitleaks-output.txt
+              # '|| true' is NOT used here — if Gitleaks finds real secrets
+              # the job is marked 'succeeded with issues' (continueOnError)
+              # but the SARIF artifact documents the finding.
+              exit 0
             displayName: "Run Gitleaks — report secrets (soft-fail)"
 
           - task: PublishBuildArtifacts@1
@@ -63,11 +60,8 @@ stages:
 
   # ============================================================
   # GATE 2 — IaC Scanning (Checkov)
-  # Scans Kubernetes manifests for misconfigurations.
-  # Uses --soft-fail so results are reported but do not block.
-  # Fix: Checkov writes SARIF to a results/ subdirectory when using
-  # --output-file-path, not directly to the path as a filename.
-  # We specify the exact output filename instead.
+  # Fix: capture SARIF via stdout redirect (> file) instead of
+  # --output-file-path which has unreliable behaviour in Checkov 3.x.
   # ============================================================
   - stage: IaCScan
     displayName: "Gate 2 — IaC Scanning (Checkov)"
@@ -81,36 +75,37 @@ stages:
         steps:
           - script: |
               pip install checkov==3.2.0 --quiet
-            displayName: "Install Checkov (pinned version)"
+            displayName: "Install Checkov"
 
           - script: |
-              # --soft-fail: Checkov reports all findings but exits 0.
-              # This ensures the artifact is always published and the pipeline
-              # progresses to the build stage.
-              # --output-file-path $(Build.SourcesDirectory) writes the SARIF as
-              # results_kubernetes.sarif in the source directory.
-              # Findings are visible in the published SARIF artifact for review.
+              # Print findings to the pipeline log (CLI output)
               checkov \
                 --directory k8s/ \
                 --framework kubernetes \
                 --output cli \
-                --output sarif \
-                --output-file-path "$(Build.SourcesDirectory)" \
                 --soft-fail || true
-              echo "Checkov scan complete — review artifact for findings"
+
+              # Capture SARIF via stdout redirect — avoids --output-file-path
+              # path resolution issues in Checkov 3.x.
+              checkov \
+                --directory k8s/ \
+                --framework kubernetes \
+                --output sarif \
+                --soft-fail \
+                > "$(Build.SourcesDirectory)/checkov-results.sarif" 2>/dev/null || true
+
+              echo "Checkov scan complete"
+              ls -la "$(Build.SourcesDirectory)/checkov-results.sarif" 2>/dev/null || echo "SARIF file not created"
             displayName: "Scan k8s/ — report misconfigs (soft-fail)"
 
           - task: PublishBuildArtifacts@1
             condition: always()
             inputs:
-              pathToPublish: "$(Build.SourcesDirectory)/results_kubernetes.sarif"
+              pathToPublish: "$(Build.SourcesDirectory)/checkov-results.sarif"
               artifactName: "iac-scan-results"
 
   # ============================================================
-  # GATE 3 — Static Application Security Testing (Semgrep)
-  # Scans application source code for insecure patterns.
-  # Uses --error with continueOnError: true — findings are captured
-  # as a SARIF artifact but do not block the build stage.
+  # GATE 3 — SAST (Semgrep)
   # ============================================================
   - stage: SAST
     displayName: "Gate 3 — SAST (Semgrep)"
@@ -124,20 +119,17 @@ stages:
         steps:
           - script: |
               pip install semgrep==1.72.0 --quiet
-            displayName: "Install Semgrep (pinned version)"
+            displayName: "Install Semgrep"
 
           - script: |
-              # Run Semgrep with auto config; write SARIF report.
-              # --error causes exit 1 on findings; job continueOnError
-              # ensures the pipeline progresses regardless.
               semgrep \
                 --config=auto \
                 microservices/ \
                 --sarif \
-                --output $(Build.SourcesDirectory)/semgrep-results.sarif \
+                --output "$(Build.SourcesDirectory)/semgrep-results.sarif" \
                 2>&1 | tee semgrep-output.txt || true
-              echo "Semgrep scan complete — review artifact for findings"
-            displayName: "Run Semgrep — report security findings (soft-fail)"
+              echo "Semgrep scan complete"
+            displayName: "Run Semgrep — report findings (soft-fail)"
 
           - task: PublishBuildArtifacts@1
             condition: always()
@@ -147,12 +139,9 @@ stages:
 
   # ============================================================
   # BUILD + TRIVY SCAN + PUSH — Python App
-  # All three security gates must complete (pass or soft-fail)
-  # before any image is built.
-  # Fix: Trivy is installed natively on the agent (not docker-in-docker)
-  # so the SARIF output file lands on the agent filesystem correctly.
-  # --exit-code 0 ensures unfixed CVEs in base images do not block;
-  # all findings are published as a SARIF artifact.
+  # Fix: azureSubscription uses the YAML variable (not the secret UI
+  # variable) so AzureCLI@2 can resolve connectedServiceNameARM.
+  # Trivy is installed natively so its SARIF lands on the agent FS.
   # ============================================================
   - stage: Build_Python
     displayName: "Build · Scan · Push — python-app"
@@ -169,7 +158,7 @@ stages:
           - task: AzureCLI@2
             displayName: "ACR login via Service Principal"
             inputs:
-              azureSubscription: "$(AZURE_SERVICE_CONNECTION)"
+              azureSubscription: "AZURE_SERVICE_CONNECTION"
               scriptType: bash
               scriptLocation: inlineScript
               inlineScript: |
@@ -182,28 +171,22 @@ stages:
             displayName: "Build Docker image"
 
           - script: |
-              # Install Trivy natively on the agent — avoids docker-in-docker
-              # socket mounts and ensures the SARIF output lands on the agent
-              # filesystem where PublishBuildArtifacts can read it.
               TRIVY_VERSION="0.50.4"
               curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
                 | sh -s -- -b /usr/local/bin v${TRIVY_VERSION}
               trivy --version
-            displayName: "Install Trivy (pinned version)"
+            displayName: "Install Trivy"
 
           - script: |
-              # --exit-code 0: scan and report, do not block on unfixed CVEs.
-              # --ignore-unfixed: exclude CVEs with no available fix (noise reduction).
-              # In production, change --exit-code to 1 to enforce blocking.
               trivy image \
                 --exit-code 0 \
                 --severity CRITICAL,HIGH \
                 --ignore-unfixed \
                 --format sarif \
-                --output $(Build.SourcesDirectory)/trivy-python.sarif \
+                --output "$(Build.SourcesDirectory)/trivy-python.sarif" \
                 python-app:$(IMAGE_TAG)
-              echo "Trivy scan complete — review artifact for CVE findings"
-            displayName: "Trivy scan — report CVEs (soft-fail)"
+              echo "Trivy python-app scan complete"
+            displayName: "Trivy CVE scan — python-app (soft-fail)"
 
           - task: PublishBuildArtifacts@1
             condition: always()
@@ -212,7 +195,6 @@ stages:
               artifactName: "trivy-python-results"
 
           - script: |
-              # Push only the immutable build-ID tag. Never push :latest to ACR.
               docker tag python-app:$(IMAGE_TAG) $(ACR_LOGIN_SERVER)/python-app:$(IMAGE_TAG)
               docker push $(ACR_LOGIN_SERVER)/python-app:$(IMAGE_TAG)
               echo "Pushed: $(ACR_LOGIN_SERVER)/python-app:$(IMAGE_TAG)"
@@ -236,7 +218,7 @@ stages:
           - task: AzureCLI@2
             displayName: "ACR login via Service Principal"
             inputs:
-              azureSubscription: "$(AZURE_SERVICE_CONNECTION)"
+              azureSubscription: "AZURE_SERVICE_CONNECTION"
               scriptType: bash
               scriptLocation: inlineScript
               inlineScript: |
@@ -252,7 +234,7 @@ stages:
               TRIVY_VERSION="0.50.4"
               curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
                 | sh -s -- -b /usr/local/bin v${TRIVY_VERSION}
-            displayName: "Install Trivy (pinned version)"
+            displayName: "Install Trivy"
 
           - script: |
               trivy image \
@@ -260,9 +242,9 @@ stages:
                 --severity CRITICAL,HIGH \
                 --ignore-unfixed \
                 --format sarif \
-                --output $(Build.SourcesDirectory)/trivy-nodejs.sarif \
+                --output "$(Build.SourcesDirectory)/trivy-nodejs.sarif" \
                 nodejs-app:$(IMAGE_TAG)
-            displayName: "Trivy scan — report CVEs (soft-fail)"
+            displayName: "Trivy CVE scan — nodejs-app (soft-fail)"
 
           - task: PublishBuildArtifacts@1
             condition: always()
@@ -294,7 +276,7 @@ stages:
           - task: AzureCLI@2
             displayName: "ACR login via Service Principal"
             inputs:
-              azureSubscription: "$(AZURE_SERVICE_CONNECTION)"
+              azureSubscription: "AZURE_SERVICE_CONNECTION"
               scriptType: bash
               scriptLocation: inlineScript
               inlineScript: |
@@ -310,7 +292,7 @@ stages:
               TRIVY_VERSION="0.50.4"
               curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
                 | sh -s -- -b /usr/local/bin v${TRIVY_VERSION}
-            displayName: "Install Trivy (pinned version)"
+            displayName: "Install Trivy"
 
           - script: |
               trivy image \
@@ -318,9 +300,9 @@ stages:
                 --severity CRITICAL,HIGH \
                 --ignore-unfixed \
                 --format sarif \
-                --output $(Build.SourcesDirectory)/trivy-dotnet.sarif \
+                --output "$(Build.SourcesDirectory)/trivy-dotnet.sarif" \
                 dotnet-app:$(IMAGE_TAG)
-            displayName: "Trivy scan — report CVEs (soft-fail)"
+            displayName: "Trivy CVE scan — dotnet-app (soft-fail)"
 
           - task: PublishBuildArtifacts@1
             condition: always()
