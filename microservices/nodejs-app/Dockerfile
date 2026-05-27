@@ -8,7 +8,7 @@ WORKDIR /app
 # Use npm ci (not npm install): ci requires package-lock.json, ensuring the
 # exact dependency tree is reproducible across every build.
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm ci --omit=dev
 
 # Copy source after deps — preserves cache on source-only changes.
 COPY --chown=node:node app.js .
