@@ -175,11 +175,12 @@ stages:
                 --insecure
 
               argocd app sync microservices-app --force --prune
-              # Wait up to 3 minutes for the application to become healthy.
+              # Wait up to 10 minutes for the application to become healthy.
+              # First pull of a new ACR image can take several minutes.
               # Pipeline fails if any pod does not reach Running state.
               argocd app wait microservices-app \
                 --health \
-                --timeout 180
+                --timeout 600
             displayName: "Sync ArgoCD app and wait for healthy status"
             env:
               ARGOCD_SERVER: $(ARGOCD_SERVER)
