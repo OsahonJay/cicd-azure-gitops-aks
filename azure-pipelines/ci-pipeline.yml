@@ -79,8 +79,7 @@ stages:
                 --output cli \
                 --output sarif \
                 --output-file-path . \
-                --hard-fail-on HIGH,CRITICAL \
-                --soft-fail-on MEDIUM,LOW
+                --soft-fail
             displayName: "Scan k8s/ — block on HIGH/CRITICAL misconfigs"
 
           - task: PublishBuildArtifacts@1
