@@ -460,7 +460,25 @@ git clone https://github.com/<YOUR_USERNAME>/cicd-azure-gitops-aks.git
 cd cicd-azure-gitops-aks
 ```
 
-### Step 6.2 — Create a GitHub Personal Access Token (PAT)
+### Step 6.2 — Update the GitHub Remote URL in the CD Pipeline
+
+The CD pipeline has a hardcoded GitHub URL that it uses to push updated manifest files back to your repository. **You must change this to point to your fork.**
+
+Open `azure-pipelines/cd-pipeline.yml` and find this line (around line 85):
+
+```bash
+https://x-access-token:$(github-pat)@github.com/Ayooluwabami/cicd-azure-gitops-aks.git
+```
+
+Change `Ayooluwabami` to your GitHub username:
+
+```bash
+https://x-access-token:$(github-pat)@github.com/<YOUR_USERNAME>/cicd-azure-gitops-aks.git
+```
+
+> **Why this matters:** The CD pipeline automatically commits updated image tags back to GitHub after every build. If this URL points to the wrong repo, the commit is rejected and deployment fails.
+
+### Step 6.3 — Create a GitHub Personal Access Token (PAT)
 
 The CD pipeline commits updated manifest files back to GitHub. It needs a token to do this.
 
@@ -473,7 +491,7 @@ The CD pipeline commits updated manifest files back to GitHub. It needs a token 
 6. Click **Generate token**
 7. Copy the token immediately — GitHub shows it only once
 
-### Step 6.3 — Store the PAT in Key Vault
+### Step 6.4 — Store the PAT in Key Vault
 
 ```bash
 az keyvault secret set \
@@ -629,6 +647,40 @@ Open `http://<GRAFANA_IP>` in a browser. Default credentials: `admin` / `admin`.
 ---
 
 ## Phase 10 — Azure DevOps Setup
+
+### Step 10.0 — Update Hardcoded IPs in cd-pipeline.yml
+
+By now you have two live IPs that are specific to your deployment:
+- **ArgoCD IP** — from Phase 5, Step 5.3
+- **Ingress IP** — from Phase 8, Step 8.2
+
+The CD pipeline has these IPs hardcoded. **You must update them before the pipeline runs, or it will try to connect to the wrong servers.**
+
+Open `azure-pipelines/cd-pipeline.yml` and make two changes:
+
+**1. ArgoCD Server IP** — in the `variables` block near the top of the file:
+
+```yaml
+# Change this to your actual ArgoCD LoadBalancer IP (from Phase 5, Step 5.3):
+ARGOCD_SERVER: "20.162.177.70"   # ← replace with your IP
+```
+
+**2. Ingress IP** — in the DAST stage near the bottom of the file:
+
+```bash
+# Change this to your actual Ingress LoadBalancer IP (from Phase 8, Step 8.2):
+INGRESS_IP="4.158.73.97"   # ← replace with your IP
+```
+
+Commit and push both changes to your GitHub repository:
+
+```bash
+git add azure-pipelines/cd-pipeline.yml
+git commit -m "config: update ArgoCD and Ingress IPs for this deployment"
+git push origin main
+```
+
+> **Why before creating the pipelines?** Azure DevOps reads the YAML from your repository at run time. If the IPs are wrong when the pipeline first runs, Stage 3 (ArgoCD sync) fails because it cannot reach the server, and Stage 4 (DAST) scans the wrong target.
 
 ### Step 10.1 — Create an Azure DevOps Organization and Project
 
@@ -1084,4 +1136,7 @@ This deletes the AKS cluster, ACR, Key Vault, agent VM, and all other resources 
 | Azure DevOps | https://dev.azure.com/gitops-cicd-org |
 | GitHub repo | https://github.com/Ayooluwabami/cicd-azure-gitops-aks |
 
-> These IPs are specific to this deployment. When you deploy from scratch, your IPs will be different. Update `cd-pipeline.yml` and `argocd/application.yaml` with your actual values.
+> **These IPs are specific to this deployment.** When you deploy from scratch, your IPs will be different. Update the following for your deployment:
+> - `azure-pipelines/cd-pipeline.yml` — `ARGOCD_SERVER` variable and `INGRESS_IP` in the DAST stage (Step 10.0)
+> - `azure-pipelines/cd-pipeline.yml` — the GitHub push URL (Step 6.2)
+> - `argocd/application.yaml` — the `repoURL` field (Step 7.3)
