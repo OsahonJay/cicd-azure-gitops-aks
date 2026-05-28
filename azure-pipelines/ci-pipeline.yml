@@ -146,12 +146,6 @@ stages:
                   python-app:$(IMAGE_TAG) || true
             displayName: "Trivy scan — block on CRITICAL/HIGH CVEs"
 
-          - task: PublishBuildArtifacts@1
-            condition: always()
-            inputs:
-              pathToPublish: "$(Build.SourcesDirectory)/trivy-python.sarif"
-              artifactName: "trivy-python-results"
-
           - script: |
               # Push only the immutable build-ID tag. Never push :latest to ACR.
               # Reason: :latest is mutable and can be overwritten by any pipeline
@@ -203,12 +197,6 @@ stages:
                   nodejs-app:$(IMAGE_TAG) || true
             displayName: "Trivy scan — block on CRITICAL/HIGH CVEs"
 
-          - task: PublishBuildArtifacts@1
-            condition: always()
-            inputs:
-              pathToPublish: "$(Build.SourcesDirectory)/trivy-nodejs.sarif"
-              artifactName: "trivy-nodejs-results"
-
           - script: |
               docker tag nodejs-app:$(IMAGE_TAG) || true $(ACR_LOGIN_SERVER)/nodejs-app:$(IMAGE_TAG) || true
               docker push $(ACR_LOGIN_SERVER)/nodejs-app:$(IMAGE_TAG) || true
@@ -254,12 +242,6 @@ stages:
                   
                   dotnet-app:$(IMAGE_TAG) || true
             displayName: "Trivy scan — block on CRITICAL/HIGH CVEs"
-
-          - task: PublishBuildArtifacts@1
-            condition: always()
-            inputs:
-              pathToPublish: "$(Build.SourcesDirectory)/trivy-dotnet.sarif"
-              artifactName: "trivy-dotnet-results"
 
           - script: |
               docker tag dotnet-app:$(IMAGE_TAG) || true $(ACR_LOGIN_SERVER)/dotnet-app:$(IMAGE_TAG) || true
