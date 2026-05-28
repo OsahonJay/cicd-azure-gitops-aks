@@ -131,7 +131,7 @@ stages:
 
           - script: |
               docker build \
-                -t python-app:$(IMAGE_TAG) || true \
+                -t python-app:$(IMAGE_TAG) \
                 microservices/python-app/
             displayName: "Build Docker image (local)"
 
@@ -182,7 +182,7 @@ stages:
 
           - script: |
               docker build \
-                -t nodejs-app:$(IMAGE_TAG) || true \
+                -t nodejs-app:$(IMAGE_TAG) \
                 microservices/nodejs-app/
             displayName: "Build Docker image (local)"
 
@@ -228,7 +228,7 @@ stages:
 
           - script: |
               docker build \
-                -t dotnet-app:$(IMAGE_TAG) || true \
+                -t dotnet-app:$(IMAGE_TAG) \
                 microservices/dotnet-app/
             displayName: "Build Docker image (local)"
 
