@@ -36,7 +36,6 @@ stages:
   # ============================================================
   - stage: UpdateManifests
     displayName: "Update K8s Manifests"
-
     jobs:
       - job: UpdateK8sManifests
         displayName: "Patch image tags in deployment manifests"
