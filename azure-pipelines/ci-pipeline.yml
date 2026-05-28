@@ -150,7 +150,7 @@ stages:
               # Push only the immutable build-ID tag. Never push :latest to ACR.
               # Reason: :latest is mutable and can be overwritten by any pipeline
               # run, making it impossible to know what is actually running.
-              docker tag python-app:$(IMAGE_TAG) || true $(ACR_LOGIN_SERVER)/python-app:$(IMAGE_TAG) || true
+              docker tag python-app:$(IMAGE_TAG) $(ACR_LOGIN_SERVER)/python-app:$(IMAGE_TAG) || true
               docker push $(ACR_LOGIN_SERVER)/python-app:$(IMAGE_TAG) || true
               echo "##vso[task.setvariable variable=PYTHON_IMAGE_DIGEST;isOutput=true]$(docker inspect --format='{{index .RepoDigests 0}}' $(ACR_LOGIN_SERVER)/python-app:$(IMAGE_TAG) || true)"
             displayName: "Push image to ACR (build-ID tag only)"
@@ -198,7 +198,7 @@ stages:
             displayName: "Trivy scan — block on CRITICAL/HIGH CVEs"
 
           - script: |
-              docker tag nodejs-app:$(IMAGE_TAG) || true $(ACR_LOGIN_SERVER)/nodejs-app:$(IMAGE_TAG) || true
+              docker tag nodejs-app:$(IMAGE_TAG) $(ACR_LOGIN_SERVER)/nodejs-app:$(IMAGE_TAG) || true
               docker push $(ACR_LOGIN_SERVER)/nodejs-app:$(IMAGE_TAG) || true
             displayName: "Push image to ACR (build-ID tag only)"
 
@@ -244,6 +244,6 @@ stages:
             displayName: "Trivy scan — block on CRITICAL/HIGH CVEs"
 
           - script: |
-              docker tag dotnet-app:$(IMAGE_TAG) || true $(ACR_LOGIN_SERVER)/dotnet-app:$(IMAGE_TAG) || true
+              docker tag dotnet-app:$(IMAGE_TAG) $(ACR_LOGIN_SERVER)/dotnet-app:$(IMAGE_TAG) || true
               docker push $(ACR_LOGIN_SERVER)/dotnet-app:$(IMAGE_TAG) || true
             displayName: "Push image to ACR (build-ID tag only)"
