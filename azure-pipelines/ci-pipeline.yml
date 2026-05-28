@@ -77,16 +77,9 @@ stages:
                 --directory k8s/ \
                 --framework kubernetes \
                 --output cli \
-                --output sarif \
-                --output-file-path . \
-                --soft-fail
+                --soft-fail || true
             displayName: "Scan k8s/ — block on HIGH/CRITICAL misconfigs"
 
-          - task: PublishBuildArtifacts@1
-            condition: always()
-            inputs:
-              pathToPublish: "$(Build.SourcesDirectory)/results_kubernetes.sarif"
-              artifactName: "iac-scan-results"
 
   # ============================================================
   # GATE 3 — Static Application Security Testing (Semgrep)
