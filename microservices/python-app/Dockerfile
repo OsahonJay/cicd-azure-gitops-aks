@@ -32,4 +32,4 @@ EXPOSE 5000
 # Use gunicorn (production WSGI server).
 # --tmp-dir /tmp: gunicorn needs a writable temp dir; we mount an emptyDir
 # at /tmp in the K8s pod spec so readOnlyRootFilesystem=true still works.
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--tmp-dir", "/tmp", "app:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "app:app"]
