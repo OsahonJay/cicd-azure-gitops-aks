@@ -72,6 +72,7 @@ stages:
             displayName: "Patch image tags → build $(IMAGE_TAG)"
 
           - script: |
+              git checkout main
               git add k8s/deployments/
               # [skip ci] prevents this commit from re-triggering the CI pipeline.
               git commit -m "ci(cd): update image tags to build $(IMAGE_TAG) [skip ci]
