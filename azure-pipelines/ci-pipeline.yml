@@ -9,7 +9,7 @@ trigger:
       - azure-pipelines/**
 
 variables:
-  ACR_NAME: "acrgitopsproject"
+  ACR_NAME: "acrgitopsproject2"
   ACR_LOGIN_SERVER: "$(ACR_NAME).azurecr.io"
   # IMAGE_TAG uses the pipeline run ID — immutable, traceable, never 'latest'.
   # Reason: mutable tags (latest, stable) defeat ArgoCD drift detection and
