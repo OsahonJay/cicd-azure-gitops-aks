@@ -29,16 +29,6 @@ stages:
   #   3. Secret access is logged in Azure Monitor; anomalous access
   #      outside pipeline hours triggers an alert.
   # ============================================================
-  - stage: FetchSecrets
-    displayName: "Fetch Runtime Secrets from Key Vault"
-    jobs:
-      - job: FetchFromKeyVault
-        displayName: "Load secrets via Managed Identity"
-        pool:
-          vmImage: "ubuntu-latest"
-        steps:
-
-  # ============================================================
   # STAGE 2 — Update Kubernetes manifests with new image tags
   # The CD pipeline commits updated image tags to Git.
   # ArgoCD then detects the diff and applies it to the cluster
@@ -46,7 +36,7 @@ stages:
   # ============================================================
   - stage: UpdateManifests
     displayName: "Update K8s Manifests"
-    dependsOn: FetchSecrets
+
     jobs:
       - job: UpdateK8sManifests
         displayName: "Patch image tags in deployment manifests"
@@ -102,7 +92,7 @@ stages:
   # ============================================================
   - stage: SyncArgoCD
     displayName: "ArgoCD Sync + Health Gate"
-    dependsOn: UpdateManifests
+
     jobs:
       - job: ArgoCDSync
         displayName: "Sync application and verify health"
