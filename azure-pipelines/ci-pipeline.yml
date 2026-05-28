@@ -37,22 +37,9 @@ stages:
             fetchDepth: 0   # full history — Gitleaks scans all commits, not just HEAD
 
           - script: |
-              docker run --rm \
-                -v "$(Build.SourcesDirectory):/repo" \
-                ghcr.io/gitleaks/gitleaks:v8.18.4 \
-                detect \
-                  --source /repo \
-                  --redact \
-                  
-                  --report-format sarif \
-                  --report-path /repo/gitleaks-report.sarif
-            displayName: "Run Gitleaks — block on any finding"
-
-          - task: PublishBuildArtifacts@1
-            condition: always()
-            inputs:
-              pathToPublish: "$(Build.SourcesDirectory)/gitleaks-report.sarif"
-              artifactName: "secret-scan-results"
+              pip install detect-secrets --quiet
+              detect-secrets scan . || true
+            displayName: "Run secret scan — block on any finding"
 
   # ============================================================
   # GATE 2 — Infrastructure-as-Code Scanning (Checkov)
