@@ -3,14 +3,14 @@ trigger: none
 resources:
   pipelines:
     - pipeline: CIPipeline
-      source: "CI-Pipeline"
+      source: "OsahonJay.cicd-azure-gitops-aks"
       trigger:
         branches:
           include:
             - main
 
 variables:
-  ACR_LOGIN_SERVER: "acrgitopsproject.azurecr.io"
+  ACR_LOGIN_SERVER: "acrgitopsproject2.azurecr.io"
   IMAGE_TAG: "$(resources.pipeline.CIPipeline.runID)"
   GIT_USER_EMAIL: "devops-bot@cicd-gitops.com"
   GIT_USER_NAME: "Azure DevOps Bot [bot]"
@@ -37,15 +37,6 @@ stages:
         pool:
           vmImage: "ubuntu-latest"
         steps:
-          - task: AzureKeyVault@2
-            displayName: "Fetch secrets — argocd-admin-password, github-pat"
-            inputs:
-              azureSubscription: "$(AZURE_SERVICE_CONNECTION)"
-              KeyVaultName: "$(KEY_VAULT_NAME)"
-              # Only fetch the secrets this pipeline actually needs.
-              # Least-privilege: do not fetch every secret in the vault.
-              SecretsFilter: "argocd-admin-password,github-pat"
-              RunAsPreJob: true
 
   # ============================================================
   # STAGE 2 — Update Kubernetes manifests with new image tags
@@ -65,20 +56,13 @@ stages:
           - checkout: self
             persistCredentials: true
 
-          - task: AzureKeyVault@2
-            displayName: "Re-fetch Key Vault secrets in this job"
-            inputs:
-              azureSubscription: "$(AZURE_SERVICE_CONNECTION)"
-              KeyVaultName: "$(KEY_VAULT_NAME)"
-              SecretsFilter: "github-pat"
-              RunAsPreJob: false
 
           - script: |
               git config user.email "$(GIT_USER_EMAIL)"
               git config user.name "$(GIT_USER_NAME)"
               # Use PAT from Key Vault for authenticated push.
               git remote set-url origin \
-                https://x-access-token:$(github-pat)@github.com/Ayooluwabami/cicd-azure-gitops-aks.git
+                https://x-access-token:$(GITHUB_PAT)@github.com/OsahonJay/cicd-azure-gitops-aks.git
             displayName: "Configure Git with Key Vault PAT"
 
           - script: |
@@ -125,13 +109,6 @@ stages:
         pool:
           vmImage: "ubuntu-latest"
         steps:
-          - task: AzureKeyVault@2
-            displayName: "Fetch ArgoCD password from Key Vault"
-            inputs:
-              azureSubscription: "$(AZURE_SERVICE_CONNECTION)"
-              KeyVaultName: "$(KEY_VAULT_NAME)"
-              SecretsFilter: "argocd-admin-password"
-              RunAsPreJob: false
 
           - script: |
               # Pin ArgoCD CLI to a specific version — not 'latest'.
@@ -150,7 +127,7 @@ stages:
               # certificate validation — it adapts the transport protocol.
               argocd login $(ARGOCD_SERVER) \
                 --username admin \
-                --password $(argocd-admin-password) \
+                --password $(ARGOCD_PASSWORD) \
                 --grpc-web
 
               argocd app sync microservices-app --force --prune
