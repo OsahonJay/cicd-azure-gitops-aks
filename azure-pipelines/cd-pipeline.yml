@@ -16,9 +16,9 @@ variables:
   GIT_USER_NAME: "Azure DevOps Bot [bot]"
   # Key Vault name — the actual secret VALUES are fetched at runtime below,
   # never stored in pipeline variables or logs.
-  KEY_VAULT_NAME: "kv-gitops-project"
+  KEY_VAULT_NAME: "kv-gitops-proj-osa"
   # ArgoCD external IP — override in Azure DevOps pipeline variables if IP changes.
-  ARGOCD_SERVER: "20.162.177.70"
+  ARGOCD_SERVER: "20.241.160.238"
   # Service connection — must match the connection created in Project Settings.
   AZURE_SERVICE_CONNECTION: "AZURE_SERVICE_CONNECTION"
 

@@ -9,8 +9,8 @@ trigger:
       - azure-pipelines/**
 
 variables:
-  ACR_NAME: "acrgitopsproject"
-  ACR_LOGIN_SERVER: "acrgitopsproject.azurecr.io"
+  ACR_NAME: "acrgitopsproject2"
+  ACR_LOGIN_SERVER: "acrgitopsproject2.azurecr.io"
   # IMAGE_TAG uses the pipeline run ID — immutable, traceable, never 'latest'.
   IMAGE_TAG: "$(Build.BuildId)"
   # Service connection name — must match Project Settings → Service Connections.

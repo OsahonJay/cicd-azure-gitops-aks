@@ -6,7 +6,7 @@ metadata:
 spec:
   project: microservices-project
   source:
-    repoURL: https://github.com/Ayooluwabami/cicd-azure-gitops-aks.git
+    repoURL: https://github.com/OsahonJay/cicd-azure-gitops-aks.git
     targetRevision: main
     path: k8s
     directory:
