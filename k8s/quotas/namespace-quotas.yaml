@@ -8,7 +8,7 @@ metadata:
   namespace: microservices
 spec:
   hard:
-    requests.cpu: "1500m"      # 3 services × 2 replicas × 100m request + headroom
+    requests.cpu: "750m"       # 3 services × 2 replicas × 50m request + headroom
     requests.memory: "768Mi"   # 3 services × 2 replicas × 64Mi + headroom
     limits.cpu: "3"            # 3 services × 2 replicas × 250–500m limit
     limits.memory: "1536Mi"    # 3 services × 2 replicas × 128–256Mi limit

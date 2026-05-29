@@ -8,6 +8,11 @@ metadata:
     version: "1.0.0"
 spec:
   replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: nodejs-app
@@ -29,7 +34,7 @@ spec:
 
       containers:
         - name: nodejs-app
-          image: acrgitopsproject2.azurecr.io/nodejs-app:35
+          image: acrgitopsproject.azurecr.io/nodejs-app:57
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
@@ -39,7 +44,7 @@ spec:
           resources:
             requests:
               memory: "64Mi"
-              cpu: "100m"
+              cpu: "50m"
             limits:
               memory: "128Mi"
               cpu: "250m"

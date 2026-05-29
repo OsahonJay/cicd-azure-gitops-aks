@@ -3,7 +3,7 @@ trigger: none
 resources:
   pipelines:
     - pipeline: CIPipeline
-      source: "OsahonJay.cicd-azure-gitops-aks"
+      source: "cicd-azure-gitops-aks"   # must match the pipeline definition name in Azure DevOps
       trigger:
         branches:
           include:
@@ -17,6 +17,10 @@ variables:
   # Key Vault name — the actual secret VALUES are fetched at runtime below,
   # never stored in pipeline variables or logs.
   KEY_VAULT_NAME: "kv-gitops-project"
+  # ArgoCD external IP — override in Azure DevOps pipeline variables if IP changes.
+  ARGOCD_SERVER: "20.162.177.70"
+  # Service connection — must match the connection created in Project Settings.
+  AZURE_SERVICE_CONNECTION: "AZURE_SERVICE_CONNECTION"
 
 stages:
   # ============================================================
@@ -29,6 +33,25 @@ stages:
   #   3. Secret access is logged in Azure Monitor; anomalous access
   #      outside pipeline hours triggers an alert.
   # ============================================================
+  - stage: FetchSecrets
+    displayName: "Fetch Runtime Secrets from Key Vault"
+    jobs:
+      - job: FetchFromKeyVault
+        displayName: "Load secrets via Managed Identity"
+        pool:
+          name: "Default"
+        steps:
+          - task: AzureKeyVault@2
+            displayName: "Fetch secrets — argocd-admin-password, github-pat"
+            inputs:
+              azureSubscription: "$(AZURE_SERVICE_CONNECTION)"
+              KeyVaultName: "$(KEY_VAULT_NAME)"
+              # Only fetch the secrets this pipeline actually needs.
+              # Least-privilege: do not fetch every secret in the vault.
+              SecretsFilter: "argocd-admin-password,github-pat"
+              RunAsPreJob: true
+
+  # ============================================================
   # STAGE 2 — Update Kubernetes manifests with new image tags
   # The CD pipeline commits updated image tags to Git.
   # ArgoCD then detects the diff and applies it to the cluster
@@ -40,7 +63,7 @@ stages:
       - job: UpdateK8sManifests
         displayName: "Patch image tags in deployment manifests"
         pool:
-          vmImage: "ubuntu-latest"
+          name: "Default"
         steps:
           - checkout: self
             persistCredentials: true
@@ -53,6 +76,15 @@ stages:
               git remote set-url origin \
                 https://x-access-token:$(GITHUB_PAT)@github.com/OsahonJay/cicd-azure-gitops-aks.git
             displayName: "Configure Git with Key Vault PAT"
+
+          - script: |
+              # Sync local workspace with GitHub's current HEAD.
+              # 'checkout: self' checks out the Azure DevOps repo; GitHub may have
+              # additional commits (e.g. manual pushes) made since checkout time.
+              # Without this reset, git push is rejected as non-fast-forward.
+              git fetch origin main
+              git reset --hard origin/main
+            displayName: "Sync local workspace with GitHub HEAD"
 
           - script: |
               # Replace the image tag in all three deployment manifests.
@@ -73,7 +105,17 @@ stages:
 
           - script: |
               git add k8s/deployments/
-              git commit -m "ci(cd): update image tags to build $(IMAGE_TAG) [skip ci]"
+              # Guard: skip commit+push if image tags are already up to date.
+              if git diff --staged --quiet; then
+                echo "No manifest changes — image tags already at $(IMAGE_TAG)"
+                exit 0
+              fi
+              # [skip ci] prevents this commit from re-triggering the CI pipeline.
+              git commit -m "ci(cd): update image tags to build $(IMAGE_TAG) [skip ci]
+
+              Pipeline run: $(Build.BuildId)
+              Triggered by: $(Build.RequestedFor)
+              Branch: $(Build.SourceBranchName)"
               git push origin HEAD:main
             displayName: "Commit and push manifest changes"
 
@@ -84,3 +126,116 @@ stages:
   # so the pipeline provides a real deployment status — not just
   # "we pushed to Git and hope for the best."
   # ============================================================
+  - stage: SyncArgoCD
+    displayName: "ArgoCD Sync + Health Gate"
+    dependsOn: UpdateManifests
+    jobs:
+      - job: ArgoCDSync
+        displayName: "Sync application and verify health"
+        pool:
+          name: "Default"
+        steps:
+          - task: AzureKeyVault@2
+            displayName: "Fetch ArgoCD password from Key Vault"
+            inputs:
+              azureSubscription: "$(AZURE_SERVICE_CONNECTION)"
+              KeyVaultName: "$(KEY_VAULT_NAME)"
+              SecretsFilter: "argocd-admin-password"
+              RunAsPreJob: false
+
+          - script: |
+              # Pin ArgoCD CLI to match the server version (v3.4.2).
+              # Reason: v2.x CLI against a v3.x server can produce API
+              # incompatibilities; matching versions avoids silent failures.
+              # Arch-aware: ARM64 agent needs argocd-linux-arm64.
+              ARGOCD_VERSION="v3.4.2"
+              ARCH=$(uname -m)
+              if [ "${ARCH}" = "aarch64" ]; then
+                ARGOCD_ARCH="arm64"
+              else
+                ARGOCD_ARCH="amd64"
+              fi
+              curl -sSL -o /tmp/argocd \
+                "https://github.com/argoproj/argo-cd/releases/download/${ARGOCD_VERSION}/argocd-linux-${ARGOCD_ARCH}"
+              sudo mv /tmp/argocd /usr/local/bin/argocd
+              sudo chmod +x /usr/local/bin/argocd
+              argocd version --client
+            displayName: "Install ArgoCD CLI (pinned v3.4.2)"
+
+          - script: |
+              # --grpc-web: use HTTP/1.1 grpc-web transport.
+              # --insecure: suppress the interactive "Proceed insecurely (y/n)?"
+              # prompt that ArgoCD shows when the server uses a self-signed cert.
+              # Without --insecure the pipeline agent hangs indefinitely waiting
+              # for stdin that never arrives.
+              argocd login $(ARGOCD_SERVER) \
+                --username admin \
+                --password $(argocd-admin-password) \
+                --grpc-web \
+                --insecure
+
+              argocd app sync microservices-app --force --prune
+              # Wait up to 10 minutes for the application to become healthy.
+              # First pull of a new ACR image can take several minutes.
+              # Pipeline fails if any pod does not reach Running state.
+              argocd app wait microservices-app \
+                --health \
+                --timeout 600
+            displayName: "Sync ArgoCD app and wait for healthy status"
+            env:
+              ARGOCD_SERVER: $(ARGOCD_SERVER)
+              # argocd-admin-password is injected by the Key Vault task above;
+              # it is masked in logs automatically by Azure DevOps.
+
+          - script: |
+              echo "=== Deployment summary ==="
+              argocd app get microservices-app --insecure
+            displayName: "Print deployment status"
+
+  # ============================================================
+  # STAGE 4 — DAST (OWASP ZAP)
+  # Runs a baseline scan against all three Ingress endpoints
+  # after ArgoCD confirms the deployment is healthy.
+  # continueOnError: findings are reported as artifacts but
+  # do not block promotion — the team reviews the SARIF report.
+  # ============================================================
+  - stage: DAST
+    displayName: "Gate 4 — DAST (OWASP ZAP)"
+    dependsOn: SyncArgoCD
+    jobs:
+      - job: ZAPScan
+        displayName: "Baseline scan — all three services via Ingress"
+        continueOnError: true
+        pool:
+          name: "Default"
+        steps:
+          - script: |
+              INGRESS_IP="4.158.73.97"
+              REPORT_DIR="$(Build.SourcesDirectory)/zap-reports"
+              mkdir -p "${REPORT_DIR}"
+
+              for APP in python nodejs dotnet; do
+                TARGET="http://${INGRESS_IP}/${APP}/"
+                echo "=== ZAP baseline scan: ${TARGET} ==="
+
+                docker run --rm \
+                  -v "${REPORT_DIR}:/zap/wrk:rw" \
+                  ghcr.io/zaproxy/zaproxy:stable \
+                  zap-baseline.py \
+                    -t "${TARGET}" \
+                    -r "zap-${APP}.html" \
+                    -J "zap-${APP}.json" \
+                    -I \
+                  2>&1 | tee "${REPORT_DIR}/zap-${APP}-output.txt" || true
+
+                echo "Scan complete for ${APP}"
+              done
+
+              echo "=== ZAP scans finished — check artifacts for findings ==="
+            displayName: "Run ZAP baseline scan — python, nodejs, dotnet"
+
+          - task: PublishBuildArtifacts@1
+            condition: always()
+            inputs:
+              pathToPublish: "$(Build.SourcesDirectory)/zap-reports"
+              artifactName: "dast-zap-results"

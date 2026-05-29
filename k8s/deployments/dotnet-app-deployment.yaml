@@ -8,6 +8,11 @@ metadata:
     version: "1.0.0"
 spec:
   replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: dotnet-app
@@ -29,7 +34,7 @@ spec:
 
       containers:
         - name: dotnet-app
-          image: acrgitopsproject2.azurecr.io/dotnet-app:35
+          image: acrgitopsproject.azurecr.io/dotnet-app:57
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
@@ -45,7 +50,7 @@ spec:
           resources:
             requests:
               memory: "128Mi"
-              cpu: "100m"
+              cpu: "50m"
             limits:
               memory: "256Mi"
               cpu: "500m"

@@ -30,6 +30,6 @@ USER appuser
 EXPOSE 5000
 
 # Use gunicorn (production WSGI server).
-# --tmp-dir /tmp: gunicorn needs a writable temp dir; we mount an emptyDir
-# at /tmp in the K8s pod spec so readOnlyRootFilesystem=true still works.
+# /tmp is mounted as emptyDir in the K8s pod spec so readOnlyRootFilesystem=true
+# still works. gunicorn uses /tmp by default for worker heartbeat files.
 CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "app:app"]
