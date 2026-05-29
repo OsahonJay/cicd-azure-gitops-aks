@@ -18,7 +18,7 @@ variables:
   # never stored in pipeline variables or logs.
   KEY_VAULT_NAME: "kv-gitops-proj-osa"
   # ArgoCD external IP — override in Azure DevOps pipeline variables if IP changes.
-  ARGOCD_SERVER: "20.241.160.238"
+  ARGOCD_SERVER: "20.81.88.223"
   # Service connection — must match the connection created in Project Settings.
   AZURE_SERVICE_CONNECTION: "AZURE_SERVICE_CONNECTION"
 
@@ -210,7 +210,7 @@ stages:
           name: "Default"
         steps:
           - script: |
-              INGRESS_IP="20.237.54.38"
+              INGRESS_IP="20.75.249.79"
               REPORT_DIR="$(Build.SourcesDirectory)/zap-reports"
               mkdir -p "${REPORT_DIR}"
 
