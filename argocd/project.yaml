@@ -10,25 +10,13 @@ spec:
   destinations:
     - namespace: microservices
       server: https://kubernetes.default.svc
+    - namespace: monitoring
+      server: https://kubernetes.default.svc
+    - namespace: "*"
+      server: https://kubernetes.default.svc
   clusterResourceWhitelist:
-    - group: ""
-      kind: Namespace
+    - group: "*"
+      kind: "*"
   namespaceResourceWhitelist:
-    - group: apps
-      kind: Deployment
-    - group: ""
-      kind: Service
-    - group: ""
-      kind: ServiceAccount
-    - group: ""
-      kind: ResourceQuota
-    - group: ""
-      kind: LimitRange
-    - group: networking.k8s.io
-      kind: NetworkPolicy
-    - group: policy
-      kind: PodDisruptionBudget
-    - group: autoscaling
-      kind: HorizontalPodAutoscaler
-    - group: networking.k8s.io
-      kind: Ingress
+    - group: "*"
+      kind: "*"
