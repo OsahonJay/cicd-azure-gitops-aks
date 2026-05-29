@@ -210,7 +210,7 @@ stages:
           name: "Default"
         steps:
           - script: |
-              INGRESS_IP="4.158.73.97"
+              INGRESS_IP="20.237.54.38"
               REPORT_DIR="$(Build.SourcesDirectory)/zap-reports"
               mkdir -p "${REPORT_DIR}"
 
