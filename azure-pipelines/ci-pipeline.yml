@@ -16,7 +16,7 @@ variables:
   # Service connection name — must match Project Settings → Service Connections.
   # Defined here (not as a UI variable) so AzureCLI@2 can resolve it.
   # Secret UI variables cannot be used as connectedServiceNameARM inputs.
-  AZURE_SERVICE_CONNECTION: "AZURE_SERVICE_CONNECTION"
+  AZURE_SERVICE_CONNECTION: "azure-service-connection"
 
 stages:
 
