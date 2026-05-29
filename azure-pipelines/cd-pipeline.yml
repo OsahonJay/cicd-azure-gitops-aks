@@ -3,7 +3,7 @@ trigger: none
 resources:
   pipelines:
     - pipeline: CIPipeline
-      source: "cicd-azure-gitops-aks"   # must match the pipeline definition name in Azure DevOps
+      source: "OsahonJay.cicd-azure-gitops-aks"   # must match the pipeline definition name in Azure DevOps
       trigger:
         branches:
           include:
