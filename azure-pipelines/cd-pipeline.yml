@@ -20,7 +20,7 @@ variables:
   # ArgoCD external IP — override in Azure DevOps pipeline variables if IP changes.
   ARGOCD_SERVER: "20.81.88.223"
   # Service connection — must match the connection created in Project Settings.
-  AZURE_SERVICE_CONNECTION: "AZURE_SERVICE_CONNECTION"
+  AZURE_SERVICE_CONNECTION: "azure-service-connection"
 
 stages:
   # ============================================================
