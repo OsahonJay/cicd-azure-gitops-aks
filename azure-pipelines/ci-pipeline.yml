@@ -192,7 +192,7 @@ stages:
 
           - script: |
               docker build \
-                --platform linux/arm64 \
+                --platform linux/amd64 \
                 -t python-app:$(IMAGE_TAG) \
                 microservices/python-app/
             displayName: "Build Docker image (linux/arm64)"
@@ -267,7 +267,7 @@ stages:
 
           - script: |
               docker build \
-                --platform linux/arm64 \
+                --platform linux/amd64 \
                 -t nodejs-app:$(IMAGE_TAG) \
                 microservices/nodejs-app/
             displayName: "Build Docker image (linux/arm64)"
@@ -342,7 +342,7 @@ stages:
 
           - script: |
               docker build \
-                --platform linux/arm64 \
+                --platform linux/amd64 \
                 -t dotnet-app:$(IMAGE_TAG) \
                 microservices/dotnet-app/
             displayName: "Build Docker image (linux/arm64)"
