@@ -176,7 +176,7 @@ stages:
           - task: AzureCLI@2
             displayName: "ACR login via Service Principal"
             inputs:
-              azureSubscription: "AZURE_SERVICE_CONNECTION"
+              azureSubscription: "azure-service-connection"
               scriptType: bash
               scriptLocation: inlineScript
               inlineScript: |
@@ -251,7 +251,7 @@ stages:
           - task: AzureCLI@2
             displayName: "ACR login via Service Principal"
             inputs:
-              azureSubscription: "AZURE_SERVICE_CONNECTION"
+              azureSubscription: "azure-service-connection"
               scriptType: bash
               scriptLocation: inlineScript
               inlineScript: |
@@ -326,7 +326,7 @@ stages:
           - task: AzureCLI@2
             displayName: "ACR login via Service Principal"
             inputs:
-              azureSubscription: "AZURE_SERVICE_CONNECTION"
+              azureSubscription: "azure-service-connection"
               scriptType: bash
               scriptLocation: inlineScript
               inlineScript: |
