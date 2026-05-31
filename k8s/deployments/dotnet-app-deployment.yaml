@@ -41,10 +41,18 @@ spec:
           env:
             - name: APP_VERSION
               value: "1.0.0"
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: api-key-secret
+                  key: api-key
+            - name: ALLOWED_ORIGIN
+              valueFrom:
+                secretKeyRef:
+                  name: api-key-secret
+                  key: allowed-origin
             - name: ASPNETCORE_URLS
               value: "http://+:8080"
-            # Disable ASP.NET Core HTTPS redirection — TLS terminates at
-            # the LoadBalancer; internal traffic is HTTP inside the cluster.
             - name: ASPNETCORE_FORWARDEDHEADERS_ENABLED
               value: "true"
           resources:
@@ -62,7 +70,6 @@ spec:
               drop: ["ALL"]
 
           volumeMounts:
-            # ASP.NET Core and dotnet runtime write to /tmp.
             - name: tmp-dir
               mountPath: /tmp
 

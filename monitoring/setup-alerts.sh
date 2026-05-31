@@ -1,27 +1,11 @@
 #!/usr/bin/env bash
-# ─────────────────────────────────────────────────────────────────────────────
-# setup-alerts.sh
-#
-# Creates Azure Monitor alert rules for the AKS cluster and microservices.
-# Run this once after the AKS cluster is provisioned.
-#
-# Usage:
-#   bash monitoring/setup-alerts.sh
-#
-# Prerequisites:
-#   - az CLI installed and logged in (az login)
-#   - AKS cluster and Log Analytics workspace already created
-# ─────────────────────────────────────────────────────────────────────────────
-
 set -euo pipefail
 
-# ── Configuration ─────────────────────────────────────────────────────────────
 RESOURCE_GROUP="rg-gitops-project"
 CLUSTER_NAME="aks-gitops-cluster"
-LOCATION="eastus"
+LOCATION="uksouth"
 ACTION_GROUP_NAME="ag-gitops-alerts"
 
-# Prompt for alert email if not set
 ALERT_EMAIL="${ALERT_EMAIL:-}"
 if [[ -z "$ALERT_EMAIL" ]]; then
   read -rp "Enter email address for alert notifications: " ALERT_EMAIL
@@ -34,7 +18,6 @@ echo "Cluster        : $CLUSTER_NAME"
 echo "Alert Email    : $ALERT_EMAIL"
 echo ""
 
-# ── Fetch resource IDs ────────────────────────────────────────────────────────
 echo "[1/8] Fetching resource IDs..."
 
 AKS_RESOURCE_ID=$(az aks show \
@@ -51,7 +34,6 @@ LOG_ANALYTICS_WS_ID=$(az aks show \
 echo "  AKS ID              : $AKS_RESOURCE_ID"
 echo "  Log Analytics WS ID : $LOG_ANALYTICS_WS_ID"
 
-# ── Create Action Group (who gets notified) ───────────────────────────────────
 echo ""
 echo "[2/8] Creating action group: $ACTION_GROUP_NAME"
 
@@ -69,10 +51,6 @@ ACTION_GROUP_ID=$(az monitor action-group show \
 
 echo "  Action group created: $ACTION_GROUP_ID"
 
-# ── Alert 1: Pod Restart Count ────────────────────────────────────────────────
-# Detects: CrashLoopBackOff — app repeatedly failing to start.
-# Why threshold 3: Kubernetes restarts with exponential backoff; reaching 3
-# restarts in 5 minutes means something is genuinely broken, not a transient blip.
 echo ""
 echo "[3/8] Creating alert: Pod Restart Count"
 
@@ -93,9 +71,6 @@ az monitor metrics alert create \
 
 echo "  Created: alert-pod-restart-high"
 
-# ── Alert 2: Node CPU High ────────────────────────────────────────────────────
-# Detects: Node under CPU pressure before pods are throttled.
-# Threshold 80%: leaves headroom before actual throttling occurs at 100%.
 echo ""
 echo "[4/8] Creating alert: Node CPU > 80%"
 
@@ -116,9 +91,6 @@ az monitor metrics alert create \
 
 echo "  Created: alert-node-cpu-high"
 
-# ── Alert 3: Node Memory High ─────────────────────────────────────────────────
-# Detects: Memory pressure before OOMKill terminates pods.
-# Threshold 85%: OOMKill can trigger at ~100%; 85% gives ~15% warning window.
 echo ""
 echo "[5/8] Creating alert: Node Memory > 85%"
 
@@ -139,9 +111,6 @@ az monitor metrics alert create \
 
 echo "  Created: alert-node-memory-high"
 
-# ── Alert 4: Container CPU Near Limit ────────────────────────────────────────
-# Detects: A specific container hitting its CPU limit ceiling.
-# At 100% of limit, the container is throttled by cgroups — requests slow down.
 echo ""
 echo "[6/8] Creating alert: Container CPU > 90% of limit"
 
@@ -162,7 +131,6 @@ az monitor metrics alert create \
 
 echo "  Created: alert-container-cpu-limit"
 
-# ── Alert 5: Container Memory Near Limit ─────────────────────────────────────
 echo ""
 echo "[7/8] Creating alert: Container Memory > 90% of limit"
 
@@ -183,9 +151,6 @@ az monitor metrics alert create \
 
 echo "  Created: alert-container-memory-limit"
 
-# ── Alert 6: ArgoCD Out-of-Sync (Log Analytics scheduled query) ───────────────
-# Detects: ArgoCD has not successfully synced in 10 minutes.
-# This catches silent CD failures — pipeline pushed to Git but ArgoCD did not apply.
 echo ""
 echo "[8/8] Creating alert: ArgoCD out-of-sync for > 10 minutes"
 
@@ -210,7 +175,6 @@ az monitor scheduled-query create \
 
 echo "  Created: alert-argocd-out-of-sync"
 
-# ── Summary ───────────────────────────────────────────────────────────────────
 echo ""
 echo "=== Alert Setup Complete ==="
 echo ""

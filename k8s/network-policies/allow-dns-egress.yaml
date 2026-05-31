@@ -1,6 +1,3 @@
-# All pods need DNS resolution (kube-dns in kube-system namespace).
-# Without this, containers cannot resolve service names or external hosts
-# after the default-deny policy is applied.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

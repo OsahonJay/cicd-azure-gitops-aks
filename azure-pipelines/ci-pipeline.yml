@@ -11,24 +11,16 @@ trigger:
 variables:
   ACR_NAME: "acrgitopsproject"
   ACR_LOGIN_SERVER: "acrgitopsproject.azurecr.io"
-  # IMAGE_TAG uses the pipeline run ID — immutable, traceable, never 'latest'.
   IMAGE_TAG: "$(Build.BuildId)"
-  # Service connection name — must match Project Settings → Service Connections.
-  # Defined here (not as a UI variable) so AzureCLI@2 can resolve it.
-  # Secret UI variables cannot be used as connectedServiceNameARM inputs.
   AZURE_SERVICE_CONNECTION: "AZURE_SERVICE_CONNECTION"
 
 stages:
 
-  # ============================================================
-  # GATE 1 — Secret Scanning (Gitleaks)
-  # ============================================================
   - stage: SecretScan
     displayName: "Gate 1 — Secret Scanning (Gitleaks)"
     jobs:
       - job: Gitleaks
         displayName: "Scan for committed secrets"
-        continueOnError: true
         pool:
           name: "Default"
         steps:
@@ -46,11 +38,7 @@ stages:
                   --report-format sarif \
                   --report-path /repo/gitleaks-report.sarif \
                 2>&1 | tee gitleaks-output.txt
-              # '|| true' is NOT used here — if Gitleaks finds real secrets
-              # the job is marked 'succeeded with issues' (continueOnError)
-              # but the SARIF artifact documents the finding.
-              exit 0
-            displayName: "Run Gitleaks — report secrets (soft-fail)"
+            displayName: "Run Gitleaks — block pipeline on secrets found"
 
           - task: PublishBuildArtifacts@1
             condition: always()
@@ -58,18 +46,12 @@ stages:
               pathToPublish: "$(Build.SourcesDirectory)/gitleaks-report.sarif"
               artifactName: "secret-scan-results"
 
-  # ============================================================
-  # GATE 2 — IaC Scanning (Checkov)
-  # Fix: capture SARIF via stdout redirect (> file) instead of
-  # --output-file-path which has unreliable behaviour in Checkov 3.x.
-  # ============================================================
   - stage: IaCScan
     displayName: "Gate 2 — IaC Scanning (Checkov)"
     dependsOn: SecretScan
     jobs:
       - job: Checkov
         displayName: "Scan K8s manifests for misconfigurations"
-        continueOnError: true
         pool:
           name: "Default"
         steps:
@@ -86,25 +68,20 @@ stages:
 
           - script: |
               export PATH="$HOME/.local/bin:$PATH"
-              # Print findings to the pipeline log (CLI output)
               checkov \
                 --directory k8s/ \
                 --framework kubernetes \
-                --output cli \
-                --soft-fail || true
+                --output cli
 
-              # Capture SARIF via stdout redirect — avoids --output-file-path
-              # path resolution issues in Checkov 3.x.
               checkov \
                 --directory k8s/ \
                 --framework kubernetes \
                 --output sarif \
-                --soft-fail \
-                > "$(Build.SourcesDirectory)/checkov-results.sarif" 2>/dev/null || true
+                > "$(Build.SourcesDirectory)/checkov-results.sarif" 2>/dev/null
 
               echo "Checkov scan complete"
               ls -la "$(Build.SourcesDirectory)/checkov-results.sarif" 2>/dev/null || echo "SARIF file not created"
-            displayName: "Scan k8s/ — report misconfigs (soft-fail)"
+            displayName: "Scan k8s/ — block pipeline on misconfigs"
 
           - task: PublishBuildArtifacts@1
             condition: always()
@@ -112,16 +89,12 @@ stages:
               pathToPublish: "$(Build.SourcesDirectory)/checkov-results.sarif"
               artifactName: "iac-scan-results"
 
-  # ============================================================
-  # GATE 3 — SAST (Semgrep)
-  # ============================================================
   - stage: SAST
     displayName: "Gate 3 — SAST (Semgrep)"
     dependsOn: SecretScan
     jobs:
       - job: Semgrep
         displayName: "Scan microservice source code"
-        continueOnError: true
         pool:
           name: "Default"
         steps:
@@ -143,9 +116,9 @@ stages:
                 microservices/ \
                 --sarif \
                 --output "$(Build.SourcesDirectory)/semgrep-results.sarif" \
-                2>&1 | tee semgrep-output.txt || true
+                2>&1 | tee semgrep-output.txt
               echo "Semgrep scan complete"
-            displayName: "Run Semgrep — report findings (soft-fail)"
+            displayName: "Run Semgrep — block pipeline on findings"
 
           - task: PublishBuildArtifacts@1
             condition: always()
@@ -153,14 +126,6 @@ stages:
               pathToPublish: "$(Build.SourcesDirectory)/semgrep-results.sarif"
               artifactName: "sast-results"
 
-  # ============================================================
-  # BUILD + TRIVY SCAN + PUSH — Python App
-  # Fix: azureSubscription uses the YAML variable (not the secret UI
-  # variable) so AzureCLI@2 can resolve connectedServiceNameARM.
-  # Trivy is installed natively so its SARIF lands on the agent FS.
-  # QEMU is required on amd64 agents to build linux/arm64 images.
-  # On native ARM64 agents QEMU is skipped (uname -m == aarch64).
-  # ============================================================
   - stage: Build_Python
     displayName: "Build · Scan · Push — python-app"
     dependsOn:
@@ -208,24 +173,19 @@ stages:
               echo "Downloading Trivy v${TRIVY_VERSION} for ${TRIVY_ARCH}..."
               curl -sSL \
                 "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_${TRIVY_ARCH}.tar.gz" \
-                | tar -xz -C /usr/local/bin trivy 2>/dev/null \
-                || echo "Binary extraction failed — CVE scan will be skipped"
+                | tar -xz -C /usr/local/bin trivy
             displayName: "Install Trivy"
 
           - script: |
               touch "$(Build.SourcesDirectory)/trivy-python.sarif"
-              if command -v trivy >/dev/null 2>&1; then
-                trivy image \
-                  --exit-code 1 \
-                  --severity CRITICAL,HIGH \
-                  --ignore-unfixed \
-                  --format sarif \
-                  --output "$(Build.SourcesDirectory)/trivy-python.sarif" \
-                  python-app:$(IMAGE_TAG)
-              else
-                echo "Trivy not available — CVE scan skipped"
-              fi
-            displayName: "Trivy CVE scan — python-app (soft-fail)"
+              trivy image \
+                --exit-code 1 \
+                --severity CRITICAL,HIGH \
+                --ignore-unfixed \
+                --format sarif \
+                --output "$(Build.SourcesDirectory)/trivy-python.sarif" \
+                python-app:$(IMAGE_TAG)
+            displayName: "Trivy CVE scan — python-app"
 
           - task: PublishBuildArtifacts@1
             condition: always()
@@ -239,9 +199,6 @@ stages:
               echo "Pushed: $(ACR_LOGIN_SERVER)/python-app:$(IMAGE_TAG)"
             displayName: "Push python-app to ACR"
 
-  # ============================================================
-  # BUILD + TRIVY SCAN + PUSH — Node.js App
-  # ============================================================
   - stage: Build_NodeJS
     displayName: "Build · Scan · Push — nodejs-app"
     dependsOn:
@@ -289,24 +246,19 @@ stages:
               echo "Downloading Trivy v${TRIVY_VERSION} for ${TRIVY_ARCH}..."
               curl -sSL \
                 "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_${TRIVY_ARCH}.tar.gz" \
-                | tar -xz -C /usr/local/bin trivy 2>/dev/null \
-                || echo "Binary extraction failed — CVE scan will be skipped"
+                | tar -xz -C /usr/local/bin trivy
             displayName: "Install Trivy"
 
           - script: |
               touch "$(Build.SourcesDirectory)/trivy-nodejs.sarif"
-              if command -v trivy >/dev/null 2>&1; then
-                trivy image \
-                  --exit-code 1 \
-                  --severity CRITICAL,HIGH \
-                  --ignore-unfixed \
-                  --format sarif \
-                  --output "$(Build.SourcesDirectory)/trivy-nodejs.sarif" \
-                  nodejs-app:$(IMAGE_TAG)
-              else
-                echo "Trivy not available — CVE scan skipped"
-              fi
-            displayName: "Trivy CVE scan — nodejs-app (soft-fail)"
+              trivy image \
+                --exit-code 1 \
+                --severity CRITICAL,HIGH \
+                --ignore-unfixed \
+                --format sarif \
+                --output "$(Build.SourcesDirectory)/trivy-nodejs.sarif" \
+                nodejs-app:$(IMAGE_TAG)
+            displayName: "Trivy CVE scan — nodejs-app"
 
           - task: PublishBuildArtifacts@1
             condition: always()
@@ -320,9 +272,6 @@ stages:
               echo "Pushed: $(ACR_LOGIN_SERVER)/nodejs-app:$(IMAGE_TAG)"
             displayName: "Push nodejs-app to ACR"
 
-  # ============================================================
-  # BUILD + TRIVY SCAN + PUSH — .NET App
-  # ============================================================
   - stage: Build_DotNet
     displayName: "Build · Scan · Push — dotnet-app"
     dependsOn:
@@ -370,24 +319,19 @@ stages:
               echo "Downloading Trivy v${TRIVY_VERSION} for ${TRIVY_ARCH}..."
               curl -sSL \
                 "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_${TRIVY_ARCH}.tar.gz" \
-                | tar -xz -C /usr/local/bin trivy 2>/dev/null \
-                || echo "Binary extraction failed — CVE scan will be skipped"
+                | tar -xz -C /usr/local/bin trivy
             displayName: "Install Trivy"
 
           - script: |
               touch "$(Build.SourcesDirectory)/trivy-dotnet.sarif"
-              if command -v trivy >/dev/null 2>&1; then
-                trivy image \
-                  --exit-code 1 \
-                  --severity CRITICAL,HIGH \
-                  --ignore-unfixed \
-                  --format sarif \
-                  --output "$(Build.SourcesDirectory)/trivy-dotnet.sarif" \
-                  dotnet-app:$(IMAGE_TAG)
-              else
-                echo "Trivy not available — CVE scan skipped"
-              fi
-            displayName: "Trivy CVE scan — dotnet-app (soft-fail)"
+              trivy image \
+                --exit-code 1 \
+                --severity CRITICAL,HIGH \
+                --ignore-unfixed \
+                --format sarif \
+                --output "$(Build.SourcesDirectory)/trivy-dotnet.sarif" \
+                dotnet-app:$(IMAGE_TAG)
+            displayName: "Trivy CVE scan — dotnet-app"
 
           - task: PublishBuildArtifacts@1
             condition: always()
@@ -400,3 +344,67 @@ stages:
               docker push $(ACR_LOGIN_SERVER)/dotnet-app:$(IMAGE_TAG)
               echo "Pushed: $(ACR_LOGIN_SERVER)/dotnet-app:$(IMAGE_TAG)"
             displayName: "Push dotnet-app to ACR"
+
+  - stage: Build_Frontend
+    displayName: "Build · Scan · Push — frontend"
+    dependsOn:
+      - SecretScan
+      - IaCScan
+      - SAST
+    jobs:
+      - job: BuildScanPushFrontend
+        displayName: "frontend"
+        pool:
+          name: "Default"
+        steps:
+          - task: AzureCLI@2
+            displayName: "ACR login via Service Principal"
+            inputs:
+              azureSubscription: "AZURE_SERVICE_CONNECTION"
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                az acr login --name $(ACR_NAME)
+
+          - script: |
+              docker build \
+                --platform linux/arm64 \
+                -t frontend:$(IMAGE_TAG) \
+                microservices/frontend/
+            displayName: "Build Docker image (linux/arm64)"
+
+          - script: |
+              TRIVY_VERSION="0.50.4"
+              ARCH=$(uname -m)
+              if [ "${ARCH}" = "aarch64" ]; then
+                TRIVY_ARCH="Linux-ARM64"
+              else
+                TRIVY_ARCH="Linux-64bit"
+              fi
+              curl -sSL \
+                "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_${TRIVY_ARCH}.tar.gz" \
+                | tar -xz -C /usr/local/bin trivy
+            displayName: "Install Trivy"
+
+          - script: |
+              touch "$(Build.SourcesDirectory)/trivy-frontend.sarif"
+              trivy image \
+                --exit-code 1 \
+                --severity CRITICAL,HIGH \
+                --ignore-unfixed \
+                --format sarif \
+                --output "$(Build.SourcesDirectory)/trivy-frontend.sarif" \
+                frontend:$(IMAGE_TAG)
+            displayName: "Trivy CVE scan — frontend"
+
+          - task: PublishBuildArtifacts@1
+            condition: always()
+            inputs:
+              pathToPublish: "$(Build.SourcesDirectory)/trivy-frontend.sarif"
+              artifactName: "trivy-frontend-results"
+
+          - script: |
+              docker tag frontend:$(IMAGE_TAG) $(ACR_LOGIN_SERVER)/frontend:$(IMAGE_TAG)
+              docker push $(ACR_LOGIN_SERVER)/frontend:$(IMAGE_TAG)
+              echo "Pushed: $(ACR_LOGIN_SERVER)/frontend:$(IMAGE_TAG)"
+            displayName: "Push frontend to ACR"

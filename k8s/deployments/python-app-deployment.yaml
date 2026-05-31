@@ -21,16 +21,9 @@ spec:
       labels:
         app: python-app
     spec:
-      # Dedicated ServiceAccount with no token auto-mount.
-      # Reason: the default SA token gives any pod the ability to query the
-      # K8s API. These microservices do not need cluster API access.
       serviceAccountName: python-app-sa
       automountServiceAccountToken: false
 
-      # Pod-level security context.
-      # runAsNonRoot: K8s enforces the image must not start as UID 0.
-      # seccompProfile RuntimeDefault: applies the container runtime's
-      # default syscall filter, blocking ~45 dangerous syscalls.
       securityContext:
         runAsNonRoot: true
         runAsUser: 1001
@@ -41,11 +34,7 @@ spec:
 
       containers:
         - name: python-app
-          # Tag is updated by the CD pipeline on every successful CI build.
-          # 'latest' is never used — it is mutable and defeats ArgoCD drift detection.
           image: acrgitopsproject.azurecr.io/python-app:57
-          # Override Dockerfile CMD to drop --tmp-dir (removed in gunicorn 22.0.0).
-          # /tmp is mounted as emptyDir below so gunicorn uses it automatically.
           command: ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "app:app"]
           imagePullPolicy: Always
           ports:
@@ -53,6 +42,16 @@ spec:
           env:
             - name: APP_VERSION
               value: "1.0.0"
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: api-key-secret
+                  key: api-key
+            - name: ALLOWED_ORIGIN
+              valueFrom:
+                secretKeyRef:
+                  name: api-key-secret
+                  key: allowed-origin
           resources:
             requests:
               memory: "64Mi"
@@ -61,11 +60,6 @@ spec:
               memory: "128Mi"
               cpu: "250m"
 
-          # Container-level security context.
-          # allowPrivilegeEscalation: false — prevents setuid/setgid escalation.
-          # readOnlyRootFilesystem: true — any write attempt outside mounted
-          # volumes raises an error; limits persistence if container is compromised.
-          # drop ALL capabilities: container starts with zero Linux capabilities.
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -73,8 +67,6 @@ spec:
               drop: ["ALL"]
 
           volumeMounts:
-            # gunicorn writes to /tmp for worker temp files.
-            # emptyDir is ephemeral, node-local, and wiped on pod deletion.
             - name: tmp-dir
               mountPath: /tmp
 

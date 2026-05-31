@@ -90,13 +90,21 @@ NGINX Ingress Controller  (public IP: 4.158.73.97)
 │   ├── application.yaml       # ArgoCD Application definition
 │   └── project.yaml           # ArgoCD AppProject definition
 ├── docs/
-│   ├── Project-Documentation.docx  # Full project documentation
-│   ├── Project-Documentation.pdf
-│   ├── setup-guide.md         # Step-by-step setup guide (start here)
-│   ├── threat-model.md        # STRIDE threat analysis
-│   ├── cost-estimate.md       # Azure cost breakdown
-│   ├── disaster-recovery.md   # DR runbook
-│   └── trade-off-matrix.md    # Architecture decision records
+│   ├── setup-guide.md              # Step-by-step setup guide (start here)
+│   ├── trade-off-matrix.md         # Architecture decision records (ADR 1–7)
+│   ├── threat-model.md             # STRIDE threat analysis
+│   ├── slo.md                      # SLIs, SLOs, and error budget policy
+│   ├── compliance.md               # Control matrix (CIS K8s, OWASP CI/CD)
+│   ├── cost-estimate.md            # Azure cost breakdown
+│   ├── disaster-recovery.md        # DR runbook with RTO/RPO
+│   ├── incident-postmortem-template.md
+│   └── runbooks/
+│       ├── pod-restart-high.md     # CrashLoopBackOff
+│       ├── node-cpu-high.md        # Node CPU > 80%
+│       ├── node-memory-high.md     # Node memory > 85% / OOMKill
+│       ├── argocd-out-of-sync.md   # GitOps sync failure
+│       ├── high-error-rate.md      # 5xx error rate SLO breach
+│       └── pipeline-failure.md     # CI/CD pipeline blocked
 ├── monitoring/
 │   ├── README.md              # Monitoring setup notes
 │   ├── log-queries.md         # Useful KQL and PromQL queries

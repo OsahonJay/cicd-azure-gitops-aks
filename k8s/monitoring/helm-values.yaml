@@ -1,12 +1,6 @@
-# kube-prometheus-stack values tuned for a single-node Standard_D2ps_v6 AKS cluster.
-# Install / upgrade:
-#   helm upgrade --install kube-prometheus-stack \
-#     prometheus-community/kube-prometheus-stack \
-#     -n monitoring -f k8s/monitoring/helm-values.yaml
-
 grafana:
   service:
-    type: LoadBalancer
+    type: ClusterIP
   resources:
     requests:
       memory: "128Mi"
@@ -14,7 +8,7 @@ grafana:
     limits:
       memory: "256Mi"
       cpu: "200m"
-  adminPassword: "admin"
+  adminPassword: "${GRAFANA_ADMIN_PASSWORD}"
   grafana.ini:
     auth.anonymous:
       enabled: false
@@ -29,7 +23,6 @@ prometheus:
       limits:
         memory: "512Mi"
         cpu: "500m"
-    # Scrape our microservices namespace
     podMonitorNamespaceSelector: {}
     podMonitorSelector: {}
     serviceMonitorNamespaceSelector: {}

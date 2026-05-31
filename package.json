@@ -1,0 +1,29 @@
+{
+  "name": "cloudboosta-academy",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Cloudboosta Academy Student Management System — local dev runner",
+  "scripts": {
+
+    "_comment_install": "── Install dependencies ──────────────────────────────",
+
+    "install:python":   "cd microservices/python-app   && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt -q",
+    "install:node":     "cd microservices/nodejs-app   && npm install",
+    "install:frontend": "cd microservices/frontend     && npm install",
+    "install:all":      "npm run install:python && npm run install:node && npm run install:frontend",
+
+    "_comment_start": "── Start individual services ────────────────────────",
+
+    "start:python":   "cd microservices/python-app  && .venv/bin/python app.py",
+    "start:node":     "cd microservices/nodejs-app  && npm run dev",
+    "start:dotnet":   "cd microservices/dotnet-app  && ASPNETCORE_URLS=http://+:8080 dotnet run",
+    "start:frontend": "cd microservices/frontend    && npm run dev",
+
+    "_comment_dev": "── Start everything together ────────────────────────",
+
+    "dev": "concurrently --kill-others-on-fail --names \"Python,NodeJS,.NET,Frontend\" --prefix-colors \"blue,green,magenta,cyan\" \"npm run start:python\" \"npm run start:node\" \"npm run start:dotnet\" \"npm run start:frontend\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

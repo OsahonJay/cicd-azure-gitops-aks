@@ -3,7 +3,7 @@ trigger: none
 resources:
   pipelines:
     - pipeline: CIPipeline
-      source: "cicd-azure-gitops-aks"   # must match the pipeline definition name in Azure DevOps
+      source: "cicd-azure-gitops-aks"
       trigger:
         branches:
           include:
@@ -14,25 +14,11 @@ variables:
   IMAGE_TAG: "$(resources.pipeline.CIPipeline.runID)"
   GIT_USER_EMAIL: "devops-bot@cicd-gitops.com"
   GIT_USER_NAME: "Azure DevOps Bot [bot]"
-  # Key Vault name — the actual secret VALUES are fetched at runtime below,
-  # never stored in pipeline variables or logs.
   KEY_VAULT_NAME: "kv-gitops-project"
-  # ArgoCD external IP — override in Azure DevOps pipeline variables if IP changes.
   ARGOCD_SERVER: "20.162.177.70"
-  # Service connection — must match the connection created in Project Settings.
   AZURE_SERVICE_CONNECTION: "AZURE_SERVICE_CONNECTION"
 
 stages:
-  # ============================================================
-  # STAGE 1 — Fetch secrets from Azure Key Vault
-  # Why Key Vault instead of pipeline variables:
-  #   1. Secrets are never stored in Azure DevOps UI where any project
-  #      admin can view them.
-  #   2. Access is controlled by Azure RBAC — auditable, rotatable
-  #      without touching the pipeline definition.
-  #   3. Secret access is logged in Azure Monitor; anomalous access
-  #      outside pipeline hours triggers an alert.
-  # ============================================================
   - stage: FetchSecrets
     displayName: "Fetch Runtime Secrets from Key Vault"
     jobs:
@@ -46,17 +32,9 @@ stages:
             inputs:
               azureSubscription: "$(AZURE_SERVICE_CONNECTION)"
               KeyVaultName: "$(KEY_VAULT_NAME)"
-              # Only fetch the secrets this pipeline actually needs.
-              # Least-privilege: do not fetch every secret in the vault.
               SecretsFilter: "argocd-admin-password,github-pat"
               RunAsPreJob: true
 
-  # ============================================================
-  # STAGE 2 — Update Kubernetes manifests with new image tags
-  # The CD pipeline commits updated image tags to Git.
-  # ArgoCD then detects the diff and applies it to the cluster
-  # (GitOps pull model — the cluster is never pushed to directly).
-  # ============================================================
   - stage: UpdateManifests
     displayName: "Update K8s Manifests"
     dependsOn: FetchSecrets
@@ -80,24 +58,16 @@ stages:
           - script: |
               git config user.email "$(GIT_USER_EMAIL)"
               git config user.name "$(GIT_USER_NAME)"
-              # Use PAT from Key Vault for authenticated push.
               git remote set-url origin \
                 https://x-access-token:$(github-pat)@github.com/Ayooluwabami/cicd-azure-gitops-aks.git
             displayName: "Configure Git with Key Vault PAT"
 
           - script: |
-              # Sync local workspace with GitHub's current HEAD.
-              # 'checkout: self' checks out the Azure DevOps repo; GitHub may have
-              # additional commits (e.g. manual pushes) made since checkout time.
-              # Without this reset, git push is rejected as non-fast-forward.
               git fetch origin main
               git reset --hard origin/main
             displayName: "Sync local workspace with GitHub HEAD"
 
           - script: |
-              # Replace the image tag in all three deployment manifests.
-              # The sed pattern matches any existing tag (not just 'latest')
-              # so re-running the pipeline always produces a clean diff.
               sed -i "s|$(ACR_LOGIN_SERVER)/python-app:.*|$(ACR_LOGIN_SERVER)/python-app:$(IMAGE_TAG)|g" \
                 k8s/deployments/python-app-deployment.yaml
 
@@ -107,18 +77,19 @@ stages:
               sed -i "s|$(ACR_LOGIN_SERVER)/dotnet-app:.*|$(ACR_LOGIN_SERVER)/dotnet-app:$(IMAGE_TAG)|g" \
                 k8s/deployments/dotnet-app-deployment.yaml
 
+              sed -i "s|$(ACR_LOGIN_SERVER)/frontend:.*|$(ACR_LOGIN_SERVER)/frontend:$(IMAGE_TAG)|g" \
+                k8s/deployments/frontend-deployment.yaml
+
               echo "Updated manifests:"
               grep "image:" k8s/deployments/*.yaml
             displayName: "Patch image tags → build $(IMAGE_TAG)"
 
           - script: |
               git add k8s/deployments/
-              # Guard: skip commit+push if image tags are already up to date.
               if git diff --staged --quiet; then
                 echo "No manifest changes — image tags already at $(IMAGE_TAG)"
                 exit 0
               fi
-              # [skip ci] prevents this commit from re-triggering the CI pipeline.
               git commit -m "ci(cd): update image tags to build $(IMAGE_TAG) [skip ci]
 
               Pipeline run: $(Build.BuildId)
@@ -127,13 +98,6 @@ stages:
               git push origin HEAD:main
             displayName: "Commit and push manifest changes"
 
-  # ============================================================
-  # STAGE 3 — Trigger ArgoCD sync and wait for health
-  # ArgoCD would auto-sync on the Git change above (typically within
-  # 3 minutes). We trigger an immediate sync and wait for health
-  # so the pipeline provides a real deployment status — not just
-  # "we pushed to Git and hope for the best."
-  # ============================================================
   - stage: SyncArgoCD
     displayName: "ArgoCD Sync + Health Gate"
     dependsOn: UpdateManifests
@@ -152,10 +116,6 @@ stages:
               RunAsPreJob: false
 
           - script: |
-              # Pin ArgoCD CLI to match the server version (v3.4.2).
-              # Reason: v2.x CLI against a v3.x server can produce API
-              # incompatibilities; matching versions avoids silent failures.
-              # Arch-aware: ARM64 agent needs argocd-linux-arm64.
               ARGOCD_VERSION="v3.4.2"
               ARCH=$(uname -m)
               if [ "${ARCH}" = "aarch64" ]; then
@@ -171,42 +131,24 @@ stages:
             displayName: "Install ArgoCD CLI (pinned v3.4.2)"
 
           - script: |
-              # --grpc-web: use HTTP/1.1 grpc-web transport.
-              # --insecure: suppress the interactive "Proceed insecurely (y/n)?"
-              # prompt that ArgoCD shows when the server uses a self-signed cert.
-              # Without --insecure the pipeline agent hangs indefinitely waiting
-              # for stdin that never arrives.
               argocd login $(ARGOCD_SERVER) \
                 --username admin \
                 --password $(argocd-admin-password) \
-                --grpc-web \
-                --insecure
+                --grpc-web
 
               argocd app sync microservices-app --force --prune
-              # Wait up to 10 minutes for the application to become healthy.
-              # First pull of a new ACR image can take several minutes.
-              # Pipeline fails if any pod does not reach Running state.
               argocd app wait microservices-app \
                 --health \
                 --timeout 600
             displayName: "Sync ArgoCD app and wait for healthy status"
             env:
               ARGOCD_SERVER: $(ARGOCD_SERVER)
-              # argocd-admin-password is injected by the Key Vault task above;
-              # it is masked in logs automatically by Azure DevOps.
 
           - script: |
               echo "=== Deployment summary ==="
-              argocd app get microservices-app --insecure
+              argocd app get microservices-app
             displayName: "Print deployment status"
 
-  # ============================================================
-  # STAGE 4 — DAST (OWASP ZAP)
-  # Runs a baseline scan against all three Ingress endpoints
-  # after ArgoCD confirms the deployment is healthy.
-  # continueOnError: findings are reported as artifacts but
-  # do not block promotion — the team reviews the SARIF report.
-  # ============================================================
   - stage: DAST
     displayName: "Gate 4 — DAST (OWASP ZAP)"
     dependsOn: SyncArgoCD

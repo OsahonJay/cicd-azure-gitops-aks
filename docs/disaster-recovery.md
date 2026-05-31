@@ -11,7 +11,7 @@
 |--------|-------|-----------|
 | **RTO** (Recovery Time Objective) | 2 hours | Time to rebuild AKS cluster + reinstall ArgoCD + re-sync all apps from Git |
 | **RPO** (Recovery Point Objective) | 0 minutes (zero data loss) | All services are stateless. No database. Git is the single source of truth and is hosted externally on GitHub — unaffected by an AKS failure |
-| **Recovery region** | Same region (East US) | Project scope: single-region. Cross-region DR is a residual risk (documented below) |
+| **Recovery region** | Same region (UK South) | Project scope: single-region. Cross-region DR is a residual risk (documented below) |
 | **Backup verification** | N/A for application state | No persistent state to back up. Infrastructure recreated from IaC (az CLI commands in setup-guide.md). Config backed up in GitHub |
 | **Failover runbook last tested** | Not tested — required before demo | Follow Section 4 of this document |
 | **Security controls in DR** | Same as production | DR environment is rebuilt from the same repository; the same manifests, NetworkPolicies, RBAC, and securityContexts are applied automatically by ArgoCD |
@@ -108,7 +108,7 @@ az login
 az account set --subscription "<YOUR_SUBSCRIPTION_ID>"
 
 # Create resource group (if also lost)
-az group create --name rg-gitops-project --location eastus
+az group create --name rg-gitops-project --location uksouth
 
 # Create AKS cluster — same spec as original
 az aks create \
@@ -236,6 +236,6 @@ Expected response from each: `{"status": "healthy"}`
 
 | Risk | Accepted Reason | Compensating Control |
 |------|----------------|---------------------|
-| Single-region deployment — an East US region outage takes down everything | Cross-region AKS replication costs ~2× and is out of scope for an academic project | Document impact: full outage; recovery requires choosing a new region and rebuilding |
+| Single-region deployment — a UK South region outage takes down everything | Cross-region AKS replication costs ~2× and is out of scope for an academic project | Document impact: full outage; recovery requires choosing a new region and rebuilding |
 | No automated DR trigger — recovery is always manual | Automated failover (Azure Traffic Manager + multi-region AKS) is enterprise-grade and out of scope | Monitor Azure Service Health alerts; initiate manual recovery from this runbook |
 | ACR images not replicated to a second region | Geo-replication is ~$45/month extra | On full cluster rebuild in a new region: re-run CI pipeline to push images to ACR in that region |

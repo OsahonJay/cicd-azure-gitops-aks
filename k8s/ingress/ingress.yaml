@@ -4,34 +4,56 @@ metadata:
   name: microservices-ingress
   namespace: microservices
   annotations:
-    # Strip the path prefix before forwarding to the backend service.
-    # /python/health  → /health on python-app-svc
-    # /nodejs/api/data → /api/data on nodejs-app-svc
-    nginx.ingress.kubernetes.io/rewrite-target: /$2
     nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
 spec:
   ingressClassName: nginx
+  tls:
+    - hosts:
+        - microservices.example.com
+      secretName: microservices-tls
   rules:
-    - http:
+    - host: microservices.example.com
+      http:
         paths:
-          - path: /python(/|$)(.*)
+          - path: /api/students(/|$)(.*)
             pathType: ImplementationSpecific
             backend:
               service:
                 name: python-app-svc
                 port:
                   number: 80
-          - path: /nodejs(/|$)(.*)
+
+          - path: /api/courses(/|$)(.*)
             pathType: ImplementationSpecific
             backend:
               service:
                 name: nodejs-app-svc
                 port:
                   number: 80
-          - path: /dotnet(/|$)(.*)
+
+          - path: /api/enrolments(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: nodejs-app-svc
+                port:
+                  number: 80
+
+          - path: /api/reports(/|$)(.*)
             pathType: ImplementationSpecific
             backend:
               service:
                 name: dotnet-app-svc
+                port:
+                  number: 80
+
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend-svc
                 port:
                   number: 80

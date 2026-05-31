@@ -1,0 +1,23 @@
+# Local state — never commit; remote state lives in Azure Blob.
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+
+# Variable files with real values — only the .example is committed.
+terraform.tfvars
+*.auto.tfvars
+
+# Terraform working directories
+.terraform/
+.terraform.lock.hcl
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Override files (local developer overrides)
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json

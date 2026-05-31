@@ -1,23 +1,24 @@
-# node:20-alpine ships with a built-in 'node' user (uid 1000).
-# We use it directly — no need to create an additional user.
+FROM --platform=$BUILDPLATFORM node:20-alpine AS builder
+
+WORKDIR /app
+
+COPY package*.json tsconfig.json ./
+RUN npm ci
+
+COPY *.ts ./
+RUN npm run build
+
 FROM node:20-alpine AS runtime
 
 WORKDIR /app
 
-# Copy manifests first so Docker cache is invalidated only when deps change.
-# Use npm ci (not npm install): ci requires package-lock.json, ensuring the
-# exact dependency tree is reproducible across every build.
 COPY package*.json ./
 RUN npm ci --omit=dev
 
-# Copy source after deps — preserves cache on source-only changes.
-COPY --chown=node:node app.js .
+COPY --from=builder --chown=node:node /app/dist ./dist
 
-# Drop to non-root.
-# Reason: node:alpine's default user is root; running as 'node' (uid 1000)
-# limits blast radius if the app process is compromised.
 USER node
 
 EXPOSE 3000
 
-CMD ["node", "app.js"]
+CMD ["node", "dist/app.js"]

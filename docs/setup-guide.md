@@ -2,9 +2,6 @@
 
 ## CI/CD Pipeline with Azure DevOps, GitOps (ArgoCD), and AKS
 
-**Institution:** Cloudboosta Academy — AWS Cloud DevOps Training  
-**Group:** 2
-
 ---
 
 ## What You Will Build
@@ -112,6 +109,133 @@ git --version
 # Ubuntu
 sudo apt-get install git
 ```
+
+---
+
+## Phase 0 — Provision Infrastructure with Terraform
+
+Terraform automates everything in Phases 1–4, 5.1–5.2, 7.1–7.4, 8, 9, and 11. A single `terraform apply` creates the AKS cluster, ACR, Key Vault, secrets, ArgoCD, NGINX Ingress, Prometheus/Grafana, and the self-hosted agent VM.
+
+**After Terraform apply you still complete manually:** Phase 6 (GitHub PAT), Phase 10 (Azure DevOps pipeline setup), and Phases 12–13 (pipeline run and verification).
+
+### Step 0.1 — Install Terraform
+
+```bash
+# macOS
+brew tap hashicorp/tap
+brew install hashicorp/tap/terraform
+
+# Ubuntu/Debian (ARM64)
+TF_VERSION="1.9.3"
+curl -Lo /tmp/terraform.zip \
+  "https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_arm64.zip"
+unzip /tmp/terraform.zip -d /usr/local/bin
+
+# Verify
+terraform version
+```
+
+### Step 0.2 — Create the Remote State Storage (One-Time)
+
+Terraform stores its state file in Azure Blob. Run these commands once before the first apply. You only ever run them once per project — never again.
+
+```bash
+az login
+az group create -n rg-tfstate -l uksouth
+az storage account create -n stgitopsstate01 -g rg-tfstate --sku Standard_LRS
+az storage container create -n tfstate --account-name stgitopsstate01
+```
+
+### Step 0.3 — Configure Variables
+
+Copy the example file and fill in the non-sensitive values:
+
+```bash
+cd terraform
+cp terraform.tfvars.example terraform.tfvars
+```
+
+Open `terraform.tfvars` and set at minimum:
+
+| Variable | Where to get it |
+|----------|----------------|
+| `pipeline_sp_object_id` | After creating the Azure DevOps service connection (Step 10.2), run: `az ad sp show --id <clientId> --query id -o tsv` |
+| `agent_admin_ssh_public_key` | Your SSH public key: `cat ~/.ssh/id_rsa.pub` |
+| `azdo_org_url` | Your Azure DevOps org URL, e.g. `https://dev.azure.com/myorg` |
+| `allowed_origin` | Your frontend domain, e.g. `https://myapp.example.com` |
+
+### Step 0.4 — Set Sensitive Variables
+
+Never write passwords into `terraform.tfvars`. Export them as environment variables — Terraform picks them up automatically via the `TF_VAR_` prefix:
+
+```bash
+export TF_VAR_argocd_admin_password="<choose-a-strong-password>"
+export TF_VAR_github_pat="ghp_xxxxxxxxxxxxxxxxxxxx"
+export TF_VAR_grafana_admin_password="<choose-a-strong-password>"
+export TF_VAR_api_key="$(openssl rand -hex 32)"
+export TF_VAR_azdo_pat="<azure-devops-pat>"
+```
+
+> **Tip:** Add these exports to a local `.env` file and run `source .env` before each session. The `.env` file is gitignored.
+
+### Step 0.5 — Apply
+
+```bash
+terraform init
+terraform plan    # review what will be created
+terraform apply   # type 'yes' to confirm
+```
+
+Apply takes approximately 10–15 minutes. When complete, Terraform prints all outputs:
+
+```
+aks_cluster_name     = "aks-gitops-project"
+acr_login_server     = "acrgitopsproject.azurecr.io"
+key_vault_uri        = "https://kv-gitops-project.vault.azure.net/"
+agent_public_ip      = "20.x.x.x"
+get_credentials_command = "az aks get-credentials --resource-group rg-gitops-project --name aks-gitops-project"
+```
+
+### Step 0.6 — Connect kubectl to the Cluster
+
+```bash
+az aks get-credentials --resource-group rg-gitops-project --name aks-gitops-project
+
+kubectl get nodes
+```
+
+All 3 nodes should show `Ready`.
+
+### Step 0.7 — Get the ArgoCD External IP
+
+The bootstrap module installs ArgoCD with a public LoadBalancer. Wait for the IP:
+
+```bash
+kubectl get svc argocd-server -n argocd --watch
+```
+
+Note the `EXTERNAL-IP` when it appears. Use it everywhere the guide refers to the ArgoCD IP.
+
+### Step 0.8 — Verify the Grafana ClusterIP (Port-Forward Access)
+
+Grafana is deployed as `ClusterIP` (not public). Access it via port-forward:
+
+```bash
+kubectl port-forward svc/kube-prometheus-stack-grafana 3000:80 -n monitoring
+```
+
+Open `http://localhost:3000`. Log in with `admin` and the password you set in `TF_VAR_grafana_admin_password`.
+
+### Using the Infra Pipeline Instead of Local Apply
+
+Once you have created the Azure DevOps pipelines (Phase 10), you can use `infra-pipeline.yml` to run Terraform through the pipeline instead of locally. Any push to `terraform/**` on `main` triggers:
+
+1. **Terraform Plan** — automatically, shows what will change
+2. **Terraform Apply** — requires a manual approval in Azure DevOps (**Pipelines → Environments → infra-apply → Approvals**)
+
+The pipeline reads all secrets from Key Vault at runtime. No secrets are stored in Azure DevOps variables.
+
+> **Prerequisite for the infra pipeline:** Create the `infra-apply` environment in Azure DevOps (**Pipelines → Environments → New environment**, name it `infra-apply`) and add yourself as a required approver before the first pipeline run.
 
 ---
 

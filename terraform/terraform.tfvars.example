@@ -1,0 +1,38 @@
+# Copy to terraform.tfvars and fill in values.
+# terraform.tfvars is gitignored — NEVER commit it.
+
+location            = "uksouth"
+resource_group_name = "rg-gitops-project"
+
+# AKS
+cluster_name = "aks-gitops-project"
+node_count   = 3
+node_vm_size = "Standard_D2ps_v6"
+
+# ACR + Key Vault
+acr_name       = "acrgitopsproject"
+key_vault_name = "kv-gitops-project"
+
+# Object ID of the Azure DevOps service connection service principal.
+# Find it: az ad sp show --id <clientId> --query id -o tsv
+pipeline_sp_object_id = "<sp-object-id>"
+
+# ArgoCD / GitOps
+github_repo_url = "https://github.com/Ayooluwabami/cicd-azure-gitops-aks.git"
+allowed_origin  = "https://your-frontend-domain.com"
+
+environment = "dev"
+cost_centre = "cloud-training"
+
+# Agent VM
+agent_admin_username       = "azureuser"
+agent_admin_ssh_public_key = "<ssh-public-key>"
+azdo_org_url               = "https://dev.azure.com/<your-org>"
+azdo_pool_name             = "Default"
+
+# ── Sensitive values — prefer TF_VAR_* environment variables ─────────────────
+# argocd_admin_password  = "..."
+# github_pat             = "..."
+# grafana_admin_password = "..."
+# api_key                = "..."
+# azdo_pat               = "..."

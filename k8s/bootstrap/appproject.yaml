@@ -6,7 +6,7 @@ metadata:
 spec:
   description: CI/CD GitOps project for microservices on AKS
   sourceRepos:
-    - "*"
+    - "https://github.com/Ayooluwabami/cicd-azure-gitops-aks.git"
   destinations:
     - namespace: microservices
       server: https://kubernetes.default.svc

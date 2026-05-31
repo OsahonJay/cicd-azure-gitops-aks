@@ -1,18 +1,4 @@
 #!/usr/bin/env bash
-# ─────────────────────────────────────────────────────────────────────────────
-# non-prod-shutdown.sh
-#
-# Stop or start the AKS cluster to avoid paying for idle compute.
-# Stopping the cluster powers down all agent nodes. The cluster control
-# plane continues to run (no charge for it under the free tier).
-#
-# Usage:
-#   ./scripts/non-prod-shutdown.sh stop    # Power down all nodes
-#   ./scripts/non-prod-shutdown.sh start   # Bring nodes back online
-#
-# Prerequisites: az CLI installed and logged in (az login)
-# ─────────────────────────────────────────────────────────────────────────────
-
 set -euo pipefail
 
 RESOURCE_GROUP="rg-gitops-project"
@@ -66,7 +52,6 @@ start_cluster() {
 
   echo "[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] Cluster started. Waiting for nodes to become Ready..."
 
-  # Get credentials in case context is stale
   az aks get-credentials \
     --resource-group "$RESOURCE_GROUP" \
     --name "$CLUSTER_NAME" \
@@ -84,7 +69,6 @@ start_cluster() {
   echo "ArgoCD may take ~2 minutes to re-establish sync after cluster start."
 }
 
-# ── Main ──────────────────────────────────────────────────────────────────────
 check_prerequisites
 
 case "$ACTION" in

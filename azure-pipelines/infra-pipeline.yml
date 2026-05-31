@@ -1,0 +1,173 @@
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - terraform/**
+
+variables:
+  TF_DIR: "$(Build.SourcesDirectory)/terraform"
+  KEY_VAULT_NAME: "kv-gitops-project"
+  AZURE_SERVICE_CONNECTION: "AZURE_SERVICE_CONNECTION"
+  TF_BACKEND_RG: "rg-tfstate"
+  TF_BACKEND_SA: "stgitopsstate01"
+  TF_BACKEND_CONTAINER: "tfstate"
+  TF_BACKEND_KEY: "cicd-gitops-aks/terraform.tfstate"
+
+stages:
+
+  - stage: TerraformPlan
+    displayName: "Terraform Plan"
+    jobs:
+      - job: Plan
+        displayName: "Init, Validate, Plan"
+        pool:
+          name: "Default"
+        steps:
+          - checkout: self
+
+          - task: AzureCLI@2
+            displayName: "Fetch secrets from Key Vault"
+            inputs:
+              azureSubscription: "$(AZURE_SERVICE_CONNECTION)"
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                fetch() {
+                  az keyvault secret show --vault-name "$(KEY_VAULT_NAME)" \
+                    --name "$1" --query value -o tsv 2>/dev/null
+                }
+                echo "##vso[task.setvariable variable=TF_VAR_argocd_admin_password;issecret=true]$(fetch argocd-admin-password)"
+                echo "##vso[task.setvariable variable=TF_VAR_github_pat;issecret=true]$(fetch github-pat)"
+                echo "##vso[task.setvariable variable=TF_VAR_grafana_admin_password;issecret=true]$(fetch grafana-admin-password)"
+                echo "##vso[task.setvariable variable=TF_VAR_api_key;issecret=true]$(fetch api-key)"
+                echo "##vso[task.setvariable variable=TF_VAR_allowed_origin;issecret=false]$(fetch allowed-origin)"
+
+          - task: AzureCLI@2
+            displayName: "Terraform Init"
+            inputs:
+              azureSubscription: "$(AZURE_SERVICE_CONNECTION)"
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                cd "$(TF_DIR)"
+                terraform init \
+                  -backend-config="resource_group_name=$(TF_BACKEND_RG)" \
+                  -backend-config="storage_account_name=$(TF_BACKEND_SA)" \
+                  -backend-config="container_name=$(TF_BACKEND_CONTAINER)" \
+                  -backend-config="key=$(TF_BACKEND_KEY)"
+            env:
+              ARM_USE_CLI: "true"
+
+          - task: AzureCLI@2
+            displayName: "Terraform Validate"
+            inputs:
+              azureSubscription: "$(AZURE_SERVICE_CONNECTION)"
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                cd "$(TF_DIR)"
+                terraform validate
+            env:
+              ARM_USE_CLI: "true"
+
+          - task: AzureCLI@2
+            displayName: "Terraform Plan"
+            inputs:
+              azureSubscription: "$(AZURE_SERVICE_CONNECTION)"
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                cd "$(TF_DIR)"
+                terraform plan \
+                  -var="pipeline_sp_object_id=$(pipeline-sp-object-id)" \
+                  -var="agent_admin_ssh_public_key=$(agent-ssh-public-key)" \
+                  -var="azdo_org_url=$(azdo-org-url)" \
+                  -var="azdo_pat=$(TF_VAR_azdo_pat)" \
+                  -out="$(TF_DIR)/tfplan"
+            env:
+              ARM_USE_CLI: "true"
+              TF_VAR_argocd_admin_password: $(TF_VAR_argocd_admin_password)
+              TF_VAR_github_pat: $(TF_VAR_github_pat)
+              TF_VAR_grafana_admin_password: $(TF_VAR_grafana_admin_password)
+              TF_VAR_api_key: $(TF_VAR_api_key)
+              TF_VAR_allowed_origin: $(TF_VAR_allowed_origin)
+              TF_VAR_azdo_pat: $(azdo-pat)
+
+          - task: PublishBuildArtifacts@1
+            condition: always()
+            inputs:
+              pathToPublish: "$(TF_DIR)/tfplan"
+              artifactName: "terraform-plan"
+
+  - stage: TerraformApply
+    displayName: "Terraform Apply"
+    dependsOn: TerraformPlan
+    jobs:
+      - deployment: Apply
+        displayName: "Apply infrastructure changes"
+        pool:
+          name: "Default"
+        environment: "infra-apply"
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+
+                - task: DownloadBuildArtifacts@1
+                  inputs:
+                    artifactName: "terraform-plan"
+                    downloadPath: "$(TF_DIR)"
+
+                - task: AzureCLI@2
+                  displayName: "Fetch secrets from Key Vault"
+                  inputs:
+                    azureSubscription: "$(AZURE_SERVICE_CONNECTION)"
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      fetch() {
+                        az keyvault secret show --vault-name "$(KEY_VAULT_NAME)" \
+                          --name "$1" --query value -o tsv 2>/dev/null
+                      }
+                      echo "##vso[task.setvariable variable=TF_VAR_argocd_admin_password;issecret=true]$(fetch argocd-admin-password)"
+                      echo "##vso[task.setvariable variable=TF_VAR_github_pat;issecret=true]$(fetch github-pat)"
+                      echo "##vso[task.setvariable variable=TF_VAR_grafana_admin_password;issecret=true]$(fetch grafana-admin-password)"
+                      echo "##vso[task.setvariable variable=TF_VAR_api_key;issecret=true]$(fetch api-key)"
+                      echo "##vso[task.setvariable variable=TF_VAR_allowed_origin;issecret=false]$(fetch allowed-origin)"
+
+                - task: AzureCLI@2
+                  displayName: "Terraform Init"
+                  inputs:
+                    azureSubscription: "$(AZURE_SERVICE_CONNECTION)"
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      cd "$(TF_DIR)"
+                      terraform init \
+                        -backend-config="resource_group_name=$(TF_BACKEND_RG)" \
+                        -backend-config="storage_account_name=$(TF_BACKEND_SA)" \
+                        -backend-config="container_name=$(TF_BACKEND_CONTAINER)" \
+                        -backend-config="key=$(TF_BACKEND_KEY)"
+                  env:
+                    ARM_USE_CLI: "true"
+
+                - task: AzureCLI@2
+                  displayName: "Terraform Apply"
+                  inputs:
+                    azureSubscription: "$(AZURE_SERVICE_CONNECTION)"
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      cd "$(TF_DIR)"
+                      terraform apply -auto-approve "$(TF_DIR)/tfplan"
+                  env:
+                    ARM_USE_CLI: "true"
+                    TF_VAR_argocd_admin_password: $(TF_VAR_argocd_admin_password)
+                    TF_VAR_github_pat: $(TF_VAR_github_pat)
+                    TF_VAR_grafana_admin_password: $(TF_VAR_grafana_admin_password)
+                    TF_VAR_api_key: $(TF_VAR_api_key)
+                    TF_VAR_allowed_origin: $(TF_VAR_allowed_origin)
+                    TF_VAR_azdo_pat: $(azdo-pat)

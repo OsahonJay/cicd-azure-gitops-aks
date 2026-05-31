@@ -41,6 +41,16 @@ spec:
           env:
             - name: APP_VERSION
               value: "1.0.0"
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: api-key-secret
+                  key: api-key
+            - name: ALLOWED_ORIGIN
+              valueFrom:
+                secretKeyRef:
+                  name: api-key-secret
+                  key: allowed-origin
           resources:
             requests:
               memory: "64Mi"
