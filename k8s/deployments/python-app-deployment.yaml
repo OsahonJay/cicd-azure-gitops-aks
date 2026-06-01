@@ -34,7 +34,7 @@ spec:
 
       containers:
         - name: python-app
-          image: acrgitopsproject.azurecr.io/python-app:57
+          image: acrgitopsproject.azurecr.io/python-app:93
           command: ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "app:app"]
           imagePullPolicy: Always
           ports:

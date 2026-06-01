@@ -34,7 +34,7 @@ spec:
 
       containers:
         - name: frontend
-          image: acrgitopsproject.azurecr.io/frontend:1
+          image: acrgitopsproject.azurecr.io/frontend:93
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
