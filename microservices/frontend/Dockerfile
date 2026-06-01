@@ -10,8 +10,8 @@ RUN npm run build
 
 FROM nginx:1.25-alpine AS runtime
 
-RUN addgroup --gid 1001 appgroup \
-    && adduser  --uid 1001 --gid 1001 --no-create-home --shell /sbin/nologin appuser \
+RUN addgroup -g 1001 appgroup \
+    && adduser -u 1001 -G appgroup -S -H -s /sbin/nologin appuser \
     && chown -R appuser:appgroup /var/cache/nginx \
     && chown -R appuser:appgroup /var/log/nginx \
     && touch /var/run/nginx.pid \

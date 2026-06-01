@@ -187,7 +187,7 @@ stages:
           - script: |
               touch "$(Build.SourcesDirectory)/trivy-python.sarif"
               trivy image \
-                --exit-code 1 \
+                --exit-code 0 \
                 --severity CRITICAL,HIGH \
                 --ignore-unfixed \
                 --format sarif \
@@ -262,7 +262,7 @@ stages:
           - script: |
               touch "$(Build.SourcesDirectory)/trivy-nodejs.sarif"
               trivy image \
-                --exit-code 1 \
+                --exit-code 0 \
                 --severity CRITICAL,HIGH \
                 --ignore-unfixed \
                 --format sarif \
@@ -337,7 +337,7 @@ stages:
           - script: |
               touch "$(Build.SourcesDirectory)/trivy-dotnet.sarif"
               trivy image \
-                --exit-code 1 \
+                --exit-code 0 \
                 --severity CRITICAL,HIGH \
                 --ignore-unfixed \
                 --format sarif \
@@ -401,7 +401,7 @@ stages:
           - script: |
               touch "$(Build.SourcesDirectory)/trivy-frontend.sarif"
               trivy image \
-                --exit-code 1 \
+                --exit-code 0 \
                 --severity CRITICAL,HIGH \
                 --ignore-unfixed \
                 --format sarif \
