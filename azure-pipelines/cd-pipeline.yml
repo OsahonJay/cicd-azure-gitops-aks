@@ -116,7 +116,7 @@ stages:
               RunAsPreJob: false
 
           - script: |
-              ARGOCD_VERSION="v3.4.2"
+              ARGOCD_VERSION="v2.12.1"
               ARCH=$(uname -m)
               if [ "${ARCH}" = "aarch64" ]; then
                 ARGOCD_ARCH="arm64"
@@ -128,7 +128,7 @@ stages:
               sudo mv /tmp/argocd /usr/local/bin/argocd
               sudo chmod +x /usr/local/bin/argocd
               argocd version --client
-            displayName: "Install ArgoCD CLI (pinned v3.4.2)"
+            displayName: "Install ArgoCD CLI (pinned v2.12.1)"
 
           - script: |
               argocd login $(ARGOCD_SERVER) \
