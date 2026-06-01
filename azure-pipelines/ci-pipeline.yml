@@ -175,7 +175,7 @@ stages:
               else
                 TRIVY_ARCH="Linux-64bit"
               fi
-              TRIVY_VERSION=$(curl -s https://api.github.com/repos/aquasecurity/trivy/releases/latest | grep '"tag_name"' | cut -d'"' -f4 | sed 's/v//')
+              TRIVY_VERSION="0.70.0"
               echo "Downloading Trivy v${TRIVY_VERSION} for ${TRIVY_ARCH}..."
               curl -sSL \
                 "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_${TRIVY_ARCH}.tar.gz" \
@@ -250,7 +250,7 @@ stages:
               else
                 TRIVY_ARCH="Linux-64bit"
               fi
-              TRIVY_VERSION=$(curl -s https://api.github.com/repos/aquasecurity/trivy/releases/latest | grep '"tag_name"' | cut -d'"' -f4 | sed 's/v//')
+              TRIVY_VERSION="0.70.0"
               echo "Downloading Trivy v${TRIVY_VERSION} for ${TRIVY_ARCH}..."
               curl -sSL \
                 "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_${TRIVY_ARCH}.tar.gz" \
@@ -325,7 +325,7 @@ stages:
               else
                 TRIVY_ARCH="Linux-64bit"
               fi
-              TRIVY_VERSION=$(curl -s https://api.github.com/repos/aquasecurity/trivy/releases/latest | grep '"tag_name"' | cut -d'"' -f4 | sed 's/v//')
+              TRIVY_VERSION="0.70.0"
               echo "Downloading Trivy v${TRIVY_VERSION} for ${TRIVY_ARCH}..."
               curl -sSL \
                 "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_${TRIVY_ARCH}.tar.gz" \
