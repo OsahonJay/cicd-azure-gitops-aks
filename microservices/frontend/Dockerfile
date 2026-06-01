@@ -1,5 +1,8 @@
 FROM node:20-alpine AS builder
 
+ARG VITE_API_KEY=""
+ENV VITE_API_KEY=$VITE_API_KEY
+
 WORKDIR /app
 
 COPY package*.json ./

@@ -370,20 +370,22 @@ stages:
           name: "Default"
         steps:
           - task: AzureCLI@2
-            displayName: "ACR login via Service Principal"
+            displayName: "ACR login and build frontend with API key"
             inputs:
               azureSubscription: "AZURE_SERVICE_CONNECTION"
               scriptType: bash
               scriptLocation: inlineScript
               inlineScript: |
                 az acr login --name $(ACR_NAME)
-
-          - script: |
-              docker build \
-                --platform linux/arm64 \
-                -t frontend:$(IMAGE_TAG) \
-                microservices/frontend/
-            displayName: "Build Docker image (linux/arm64)"
+                VITE_API_KEY=$(az keyvault secret show \
+                  --name api-key \
+                  --vault-name kv-gitops-project \
+                  --query value -o tsv)
+                docker build \
+                  --platform linux/arm64 \
+                  --build-arg VITE_API_KEY="$VITE_API_KEY" \
+                  -t frontend:$(IMAGE_TAG) \
+                  microservices/frontend/
 
           - script: |
               TRIVY_VERSION="0.70.0"

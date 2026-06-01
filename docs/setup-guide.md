@@ -206,25 +206,68 @@ kubectl get nodes
 
 All 3 nodes should show `Ready`.
 
-### Step 0.7 — Get the ArgoCD External IP
-
-The bootstrap module installs ArgoCD with a public LoadBalancer. Wait for the IP:
+### Step 0.7 — Get Service External IPs
 
 ```bash
-kubectl get svc argocd-server -n argocd --watch
+# ArgoCD UI
+kubectl get svc argocd-server -n argocd
+# Note the EXTERNAL-IP — this is your ArgoCD URL: http://<EXTERNAL-IP>
+
+# Ingress (frontend + APIs)
+kubectl get svc ingress-nginx-controller -n ingress-nginx
+# Note the EXTERNAL-IP — use it as: https://<EXTERNAL-IP>.nip.io
 ```
 
-Note the `EXTERNAL-IP` when it appears. Use it everywhere the guide refers to the ArgoCD IP.
+Update `azure-pipelines/cd-pipeline.yml` with your actual IPs:
+- `ARGOCD_SERVER` variable → ArgoCD EXTERNAL-IP
+- `INGRESS_IP` in the DAST stage → Ingress EXTERNAL-IP
 
-### Step 0.8 — Verify the Grafana ClusterIP (Port-Forward Access)
+Also update `k8s/ingress/ingress.yaml` — replace `20.108.134.194.nip.io` with `<YOUR-INGRESS-IP>.nip.io`.
 
-Grafana is deployed as `ClusterIP` (not public). Access it via port-forward:
+### Step 0.8 — Verify All Pods Are Running
+
+```bash
+kubectl get pods -n argocd
+kubectl get pods -n ingress-nginx
+kubectl get pods -n monitoring
+kubectl get nodes
+```
+
+All nodes should show `Ready` and all pods `Running`.
+
+### Step 0.9 — Access ArgoCD
+
+Open `http://<ARGOCD-IP>` in your browser.
+- Username: `admin`
+- Password: the value you set in `TF_VAR_argocd_admin_password`
+
+### Step 0.10 — Access Grafana (Port-Forward)
+
+Grafana is deployed as `ClusterIP` (no public IP). Run this on your **local machine**:
 
 ```bash
 kubectl port-forward svc/kube-prometheus-stack-grafana 3000:80 -n monitoring
 ```
 
-Open `http://localhost:3000`. Log in with `admin` and the password you set in `TF_VAR_grafana_admin_password`.
+Open `http://localhost:3000`. If login fails with your `TF_VAR_grafana_admin_password`, reset it:
+
+```bash
+kubectl exec -n monitoring \
+  $(kubectl get pod -n monitoring -l app.kubernetes.io/name=grafana -o name | head -1) \
+  -- grafana-cli admin reset-admin-password <YOUR_PASSWORD>
+```
+
+### Step 0.11 — Set Up Agent VM kubectl Access
+
+SSH into the agent VM and configure kubectl:
+
+```bash
+ssh azureuser@<AGENT_PUBLIC_IP>
+az login
+az account set --subscription "<SUBSCRIPTION_ID>"
+az aks get-credentials --resource-group rg-gitops-project --name aks-gitops-project
+kubectl get nodes   # should show 3 Ready nodes
+```
 
 ### Using the Infra Pipeline Instead of Local Apply
 
@@ -1250,17 +1293,53 @@ This deletes the AKS cluster, ACR, Key Vault, agent VM, and all other resources 
 
 | Resource | Value |
 |----------|-------|
-| ArgoCD UI | http://20.162.177.70 |
-| Ingress IP | 4.158.73.97 |
-| Grafana UI | http://85.210.216.241 |
-| Python app | http://4.158.73.97/python/ |
-| Node.js app | http://4.158.73.97/nodejs/ |
-| .NET app | http://4.158.73.97/dotnet/ |
+| ArgoCD UI | http://20.26.248.3 |
+| Ingress IP | 20.108.134.194 |
+| Frontend | https://20.108.134.194.nip.io |
+| Students API | https://20.108.134.194.nip.io/api/students |
+| Courses API | https://20.108.134.194.nip.io/api/courses |
+| Enrolments API | https://20.108.134.194.nip.io/api/enrolments |
+| Reports API | https://20.108.134.194.nip.io/api/reports |
+| Grafana UI | http://localhost:3000 (via port-forward) |
+| Agent VM IP | 20.254.39.249 |
 | ACR login server | acrgitopsproject.azurecr.io |
+| Key Vault | https://kv-gitops-project.vault.azure.net/ |
 | Azure DevOps | https://dev.azure.com/gitops-cicd-org |
 | GitHub repo | https://github.com/Ayooluwabami/cicd-azure-gitops-aks |
 
-> **These IPs are specific to this deployment.** When you deploy from scratch, your IPs will be different. Update the following for your deployment:
-> - `azure-pipelines/cd-pipeline.yml` — `ARGOCD_SERVER` variable and `INGRESS_IP` in the DAST stage (Step 10.0)
-> - `azure-pipelines/cd-pipeline.yml` — the GitHub push URL (Step 6.2)
-> - `argocd/application.yaml` — the `repoURL` field (Step 7.3)
+> **These IPs are specific to this deployment.** When you deploy from scratch, your IPs will differ. Update:
+> - `azure-pipelines/cd-pipeline.yml` — `ARGOCD_SERVER` variable and `INGRESS_IP` in the DAST stage
+> - `k8s/ingress/ingress.yaml` — replace `20.108.134.194.nip.io` with `<new-ingress-ip>.nip.io`
+> - `argocd/application.yaml` — the `repoURL` field if using a fork
+
+## Known Post-Apply Manual Steps
+
+These are required after every fresh `terraform apply` if deploying to a new environment:
+
+### Agent VM — Register Pipeline Agent
+SSH into the agent VM and run (Steps 11.4–11.6 in Phase 11):
+```bash
+ssh azureuser@<AGENT_IP>
+az login && az aks get-credentials --resource-group rg-gitops-project --name aks-gitops-project
+mkdir ~/agent && cd ~/agent
+wget https://download.agent.dev.azure.com/agent/4.273.0/vsts-agent-linux-arm64-4.273.0.tar.gz
+tar zxvf vsts-agent-linux-arm64-4.273.0.tar.gz
+./config.sh --url https://dev.azure.com/gitops-cicd-org --auth pat --token <AZDO_PAT> \
+  --pool Default --agent vm-devops-agent --unattended --acceptTeeEula
+sudo ./svc.sh install azureuser && sudo ./svc.sh start
+```
+
+### Azure DevOps — Grant Key Vault Access to Service Connection
+After creating the `AZURE_SERVICE_CONNECTION` service connection (Step 10.2):
+```bash
+az keyvault set-policy -n kv-gitops-project \
+  --spn "<service-connection-app-id>" --secret-permissions get list
+```
+
+### AppProject — Patch if Secret Sync Fails
+If ArgoCD sync fails with "Secret not permitted", patch the AppProject:
+```bash
+kubectl patch appproject microservices-project -n argocd --type='json' \
+  -p='[{"op":"add","path":"/spec/namespaceResourceWhitelist/-","value":{"group":"","kind":"Secret"}}]'
+```
+This is already fixed in `k8s/bootstrap/appproject.yaml` so it should not occur on a fresh deploy.

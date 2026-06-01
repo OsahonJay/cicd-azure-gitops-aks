@@ -42,6 +42,11 @@ resource "helm_release" "ingress_nginx" {
     name  = "controller.replicaCount"
     value = "2"
   }
+
+  set {
+    name  = "controller.service.annotations.service\\.beta\\.kubernetes\\.io/azure-load-balancer-health-probe-request-path"
+    value = "/healthz"
+  }
 }
 
 resource "helm_release" "cert_manager" {
