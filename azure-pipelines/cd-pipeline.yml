@@ -15,7 +15,7 @@ variables:
   GIT_USER_EMAIL: "devops-bot@cicd-gitops.com"
   GIT_USER_NAME: "Azure DevOps Bot [bot]"
   KEY_VAULT_NAME: "kv-gitops-project"
-  ARGOCD_SERVER: "20.162.177.70"
+  ARGOCD_SERVER: "20.26.248.3"
   AZURE_SERVICE_CONNECTION: "AZURE_SERVICE_CONNECTION"
 
 stages:
@@ -160,7 +160,7 @@ stages:
           name: "Default"
         steps:
           - script: |
-              INGRESS_IP="4.158.73.97"
+              INGRESS_IP="20.108.134.194"
               REPORT_DIR="$(Build.SourcesDirectory)/zap-reports"
               mkdir -p "${REPORT_DIR}"
 
