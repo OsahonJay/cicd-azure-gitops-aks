@@ -134,19 +134,21 @@ stages:
               argocd login $(ARGOCD_SERVER) \
                 --username admin \
                 --password $(argocd-admin-password) \
-                --grpc-web
+                --grpc-web \
+                --insecure
 
-              argocd app sync microservices-app --force --prune
+              argocd app sync microservices-app --force --prune --insecure
               argocd app wait microservices-app \
                 --health \
-                --timeout 600
+                --timeout 600 \
+                --insecure
             displayName: "Sync ArgoCD app and wait for healthy status"
             env:
               ARGOCD_SERVER: $(ARGOCD_SERVER)
 
           - script: |
               echo "=== Deployment summary ==="
-              argocd app get microservices-app
+              argocd app get microservices-app --insecure
             displayName: "Print deployment status"
 
   - stage: DAST
