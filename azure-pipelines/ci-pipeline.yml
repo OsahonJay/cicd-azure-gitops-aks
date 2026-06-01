@@ -55,6 +55,9 @@ stages:
         pool:
           name: "Default"
         steps:
+          - script: mkdir -p $(Pipeline.Workspace)/.pip-cache
+            displayName: "Ensure pip cache directory exists"
+
           - task: Cache@2
             displayName: "Cache pip wheels — checkov"
             inputs:
@@ -98,6 +101,9 @@ stages:
         pool:
           name: "Default"
         steps:
+          - script: mkdir -p $(Pipeline.Workspace)/.pip-cache
+            displayName: "Ensure pip cache directory exists"
+
           - task: Cache@2
             displayName: "Cache pip wheels — semgrep"
             inputs:
