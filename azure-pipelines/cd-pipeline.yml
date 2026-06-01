@@ -137,10 +137,11 @@ stages:
                 --grpc-web \
                 --insecure
 
-              argocd app sync microservices-app --force --prune --insecure
+              argocd app sync microservices-app --force --prune --grpc-web --insecure
               argocd app wait microservices-app \
                 --health \
                 --timeout 600 \
+                --grpc-web \
                 --insecure
             displayName: "Sync ArgoCD app and wait for healthy status"
             env:
@@ -148,7 +149,7 @@ stages:
 
           - script: |
               echo "=== Deployment summary ==="
-              argocd app get microservices-app --insecure
+              argocd app get microservices-app --grpc-web --insecure
             displayName: "Print deployment status"
 
   - stage: DAST
