@@ -14,7 +14,7 @@ WORKDIR /app
 
 COPY --from=builder /install /usr/local
 
-COPY --chown=appuser:appgroup app.py .
+COPY --chown=appuser:appgroup *.py .
 
 USER appuser
 
