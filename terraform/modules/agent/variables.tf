@@ -16,4 +16,7 @@ variable "ssh_source_cidr" {
   default     = "*"
 }
 
-variable "tags" { type = map(string); default = {} }
+variable "tags" {
+  type    = map(string)
+  default = {}
+}
