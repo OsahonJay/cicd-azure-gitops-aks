@@ -169,17 +169,18 @@ stages:
             displayName: "Build Docker image (linux/arm64)"
 
           - script: |
-              TRIVY_VERSION="0.50.4"
               ARCH=$(uname -m)
               if [ "${ARCH}" = "aarch64" ]; then
                 TRIVY_ARCH="Linux-ARM64"
               else
                 TRIVY_ARCH="Linux-64bit"
               fi
+              TRIVY_VERSION=$(curl -s https://api.github.com/repos/aquasecurity/trivy/releases/latest | grep '"tag_name"' | cut -d'"' -f4 | sed 's/v//')
               echo "Downloading Trivy v${TRIVY_VERSION} for ${TRIVY_ARCH}..."
               curl -sSL \
                 "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_${TRIVY_ARCH}.tar.gz" \
                 | tar -xz -C /usr/local/bin trivy
+              trivy --version
             displayName: "Install Trivy"
 
           - script: |
@@ -242,17 +243,18 @@ stages:
             displayName: "Build Docker image (linux/arm64)"
 
           - script: |
-              TRIVY_VERSION="0.50.4"
               ARCH=$(uname -m)
               if [ "${ARCH}" = "aarch64" ]; then
                 TRIVY_ARCH="Linux-ARM64"
               else
                 TRIVY_ARCH="Linux-64bit"
               fi
+              TRIVY_VERSION=$(curl -s https://api.github.com/repos/aquasecurity/trivy/releases/latest | grep '"tag_name"' | cut -d'"' -f4 | sed 's/v//')
               echo "Downloading Trivy v${TRIVY_VERSION} for ${TRIVY_ARCH}..."
               curl -sSL \
                 "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_${TRIVY_ARCH}.tar.gz" \
                 | tar -xz -C /usr/local/bin trivy
+              trivy --version
             displayName: "Install Trivy"
 
           - script: |
@@ -315,17 +317,18 @@ stages:
             displayName: "Build Docker image (linux/arm64)"
 
           - script: |
-              TRIVY_VERSION="0.50.4"
               ARCH=$(uname -m)
               if [ "${ARCH}" = "aarch64" ]; then
                 TRIVY_ARCH="Linux-ARM64"
               else
                 TRIVY_ARCH="Linux-64bit"
               fi
+              TRIVY_VERSION=$(curl -s https://api.github.com/repos/aquasecurity/trivy/releases/latest | grep '"tag_name"' | cut -d'"' -f4 | sed 's/v//')
               echo "Downloading Trivy v${TRIVY_VERSION} for ${TRIVY_ARCH}..."
               curl -sSL \
                 "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_${TRIVY_ARCH}.tar.gz" \
                 | tar -xz -C /usr/local/bin trivy
+              trivy --version
             displayName: "Install Trivy"
 
           - script: |
