@@ -32,3 +32,5 @@ spec:
       kind: HorizontalPodAutoscaler
     - group: networking.k8s.io
       kind: Ingress
+    - group: ""
+      kind: Secret

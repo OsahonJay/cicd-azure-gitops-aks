@@ -12,10 +12,10 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - INGRESS_HOST
+        - 20.108.134.194.nip.io
       secretName: microservices-tls
   rules:
-    - host: INGRESS_HOST
+    - host: 20.108.134.194.nip.io
       http:
         paths:
           - path: /api/students(/|$)(.*)
