@@ -137,6 +137,12 @@ module "bootstrap" {
 
   depends_on = [module.aks]
 
+  providers = {
+    kubernetes = kubernetes
+    helm       = helm
+    kubectl    = kubectl
+  }
+
   argocd_admin_password  = var.argocd_admin_password
   grafana_admin_password = var.grafana_admin_password
   github_repo_url        = var.github_repo_url

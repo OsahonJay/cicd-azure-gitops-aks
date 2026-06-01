@@ -64,7 +64,7 @@ resource "helm_release" "kube_prometheus_stack" {
   chart      = "kube-prometheus-stack"
   version    = "61.2.0"
 
-  values = [file("${path.root}/../../k8s/monitoring/helm-values.yaml")]
+  values = [file("${path.module}/../../../k8s/monitoring/helm-values.yaml")]
 
   set_sensitive {
     name  = "grafana.adminPassword"
@@ -128,16 +128,16 @@ resource "kubernetes_secret" "api_key" {
 }
 
 resource "kubectl_manifest" "cert_issuers" {
-  yaml_body  = file("${path.root}/../../k8s/bootstrap/cert-issuers.yaml")
+  yaml_body  = file("${path.module}/../../../k8s/bootstrap/cert-issuers.yaml")
   depends_on = [helm_release.cert_manager]
 }
 
 resource "kubectl_manifest" "argocd_appproject" {
-  yaml_body  = file("${path.root}/../../k8s/bootstrap/appproject.yaml")
+  yaml_body  = file("${path.module}/../../../k8s/bootstrap/appproject.yaml")
   depends_on = [helm_release.argocd]
 }
 
 resource "kubectl_manifest" "argocd_application" {
-  yaml_body  = file("${path.root}/../../argocd/application.yaml")
+  yaml_body  = file("${path.module}/../../../argocd/application.yaml")
   depends_on = [kubectl_manifest.argocd_appproject]
 }
