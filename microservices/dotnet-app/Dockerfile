@@ -4,7 +4,7 @@ WORKDIR /src
 COPY dotnet-app.csproj .
 RUN dotnet restore
 
-COPY *.cs .
+COPY *.cs ./
 RUN dotnet publish -c Release -o /app/publish --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
