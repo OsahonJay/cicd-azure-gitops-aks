@@ -386,16 +386,19 @@ stages:
             displayName: "Build Docker image (linux/arm64)"
 
           - script: |
-              TRIVY_VERSION="0.50.4"
+              TRIVY_VERSION="0.70.0"
               ARCH=$(uname -m)
               if [ "${ARCH}" = "aarch64" ]; then
                 TRIVY_ARCH="Linux-ARM64"
               else
                 TRIVY_ARCH="Linux-64bit"
               fi
+              echo "Downloading Trivy v${TRIVY_VERSION} for ${TRIVY_ARCH}..."
               curl -sSL \
                 "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_${TRIVY_ARCH}.tar.gz" \
-                | tar -xz -C /usr/local/bin trivy
+                | tar -xz -C /tmp trivy
+              sudo mv /tmp/trivy /usr/local/bin/trivy
+              trivy --version
             displayName: "Install Trivy"
 
           - script: |
