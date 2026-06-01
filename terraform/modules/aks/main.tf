@@ -31,6 +31,7 @@ resource "azurerm_kubernetes_cluster" "main" {
   }
 
   role_based_access_control_enabled = true
+  oidc_issuer_enabled               = true
 
   tags = var.tags
 }
