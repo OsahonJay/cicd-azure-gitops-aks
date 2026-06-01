@@ -7,15 +7,15 @@ metadata:
     nginx.ingress.kubernetes.io/use-regex: "true"
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    cert-manager.io/cluster-issuer: "selfsigned-issuer"
 spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - microservices.example.com
+        - INGRESS_HOST
       secretName: microservices-tls
   rules:
-    - host: microservices.example.com
+    - host: INGRESS_HOST
       http:
         paths:
           - path: /api/students(/|$)(.*)

@@ -141,4 +141,6 @@ module "bootstrap" {
   grafana_admin_password = var.grafana_admin_password
   github_repo_url        = var.github_repo_url
   github_pat             = var.github_pat
+  api_key                = var.api_key
+  allowed_origin         = var.allowed_origin
 }

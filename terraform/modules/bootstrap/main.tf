@@ -114,6 +114,24 @@ resource "kubernetes_secret" "argocd_github_repo" {
   depends_on = [helm_release.argocd]
 }
 
+resource "kubernetes_secret" "api_key" {
+  metadata {
+    name      = "api-key-secret"
+    namespace = kubernetes_namespace.microservices.metadata[0].name
+  }
+  type = "Opaque"
+  data = {
+    "api-key"        = var.api_key
+    "allowed-origin" = var.allowed_origin
+  }
+  depends_on = [kubernetes_namespace.microservices]
+}
+
+resource "kubectl_manifest" "cert_issuers" {
+  yaml_body  = file("${path.root}/../../k8s/bootstrap/cert-issuers.yaml")
+  depends_on = [helm_release.cert_manager]
+}
+
 resource "kubectl_manifest" "argocd_appproject" {
   yaml_body  = file("${path.root}/../../k8s/bootstrap/appproject.yaml")
   depends_on = [helm_release.argocd]
