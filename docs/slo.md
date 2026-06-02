@@ -90,11 +90,14 @@ Alerts fire at a tighter threshold than the SLO to give the on-call engineer tim
 
 ## Services in Scope
 
-| Service | Port | Health Endpoint | Owner |
-|---------|------|----------------|-------|
-| python-app (student-service) | 5000 | `/health` | Group 2 |
-| nodejs-app (course-service) | 3000 | `/health` | Group 2 |
-| dotnet-app (reporting-service) | 8080 | `/health` | Group 2 |
+| Service | Port | Health Endpoint | Public URL | Owner |
+|---------|------|----------------|------------|-------|
+| python-app (student-service) | 5000 | `/health` | `https://<INGRESS-IP>.nip.io/api/students` | Group 2 |
+| nodejs-app (course-service) | 3000 | `/health` | `https://<INGRESS-IP>.nip.io/api/courses` | Group 2 |
+| dotnet-app (reporting-service) | 8080 | `/health` | `https://<INGRESS-IP>.nip.io/api/reports` | Group 2 |
+| frontend (React SPA) | 8080 | `/` (HTTP 200) | `https://<INGRESS-IP>.nip.io/` | Group 2 |
+
+> All services are accessible only via the NGINX Ingress at `https://<INGRESS-IP>.nip.io`. Individual service ports are ClusterIP-only and are not externally accessible.
 
 ---
 

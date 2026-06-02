@@ -54,8 +54,8 @@ kubectl drain <NODE_NAME> --ignore-daemonsets --delete-emptydir-data
 # Check if Azure automatically replaced the node (AKS heals node pools)
 az aks nodepool show \
   --resource-group rg-gitops-project \
-  --cluster-name aks-gitops-cluster \
-  --nodepool-name nodepool1
+  --cluster-name aks-gitops-project \
+  --nodepool-name system
 
 # Once replaced node appears Ready, uncordon it
 kubectl uncordon <NEW_NODE_NAME>
@@ -94,123 +94,97 @@ echo "ArgoCD UI: http://$ARGOCD_IP"
 
 ## Section 3 — Full Cluster Recovery (AKS Total Loss)
 
-**Estimated time: 45–90 minutes**
+**Estimated time: 20–40 minutes**
 
 This is the worst-case scenario. The entire AKS cluster is gone or unrecoverable.
-Because all state is in GitHub and all configuration is in code, recovery is a
-rebuild — not a restore.
+Because all infrastructure is defined in Terraform and all application state is in GitHub,
+recovery is a full rebuild via `terraform apply` — not a manual restore.
 
-### Step 3.1 — Provision New AKS Cluster
+### Step 3.1 — Re-provision with Terraform
 
 ```bash
 # Authenticate
 az login
 az account set --subscription "<YOUR_SUBSCRIPTION_ID>"
 
-# Create resource group (if also lost)
-az group create --name rg-gitops-project --location uksouth
+# Export the same secrets used originally
+export TF_VAR_argocd_admin_password="<from Key Vault or your records>"
+export TF_VAR_grafana_admin_password="<from Key Vault or your records>"
+export TF_VAR_github_pat="<from Key Vault or your records>"
+export TF_VAR_azdo_pat="<from your records>"
 
-# Create AKS cluster — same spec as original
-az aks create \
-  --resource-group rg-gitops-project \
-  --name aks-gitops-cluster \
-  --node-count 3 \
-  --node-vm-size Standard_B2s \
-  --enable-addons monitoring \
-  --generate-ssh-keys \
-  --attach-acr acrgitopsproject
-
-# Get credentials
-az aks get-credentials \
-  --resource-group rg-gitops-project \
-  --name aks-gitops-cluster
-
-# Verify nodes
-kubectl get nodes
+cd terraform
+terraform init
+terraform apply   # type yes — rebuilds all 33 resources
 ```
 
-Expected: 3 nodes in Ready state within ~5 minutes of the command completing.
+Terraform recreates: resource group, AKS cluster, ACR, Key Vault (and re-populates secrets),
+NGINX Ingress, cert-manager, ArgoCD, Prometheus/Grafana, namespaces, and the ArgoCD Application.
 
-### Step 3.2 — Reinstall ArgoCD
+### Step 3.2 — Connect kubectl and Get New IPs
 
 ```bash
-kubectl create namespace argocd
+az aks get-credentials --resource-group rg-gitops-project --name aks-gitops-project
 
-kubectl apply -n argocd \
-  -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
-
-kubectl wait --for=condition=ready pod \
-  --all -n argocd --timeout=300s
-
-# Expose the UI
-kubectl patch svc argocd-server -n argocd \
-  -p '{"spec": {"type": "LoadBalancer"}}'
-
-# Retrieve the new admin password
-kubectl -n argocd get secret argocd-initial-admin-secret \
-  -o jsonpath="{.data.password}" | base64 -d; echo
+# Get new IPs (they change on every rebuild)
+kubectl get svc argocd-server -n argocd --no-headers | awk '{print "ArgoCD:", $4}'
+kubectl get svc ingress-nginx-controller -n ingress-nginx --no-headers | awk '{print "Ingress:", $4}'
 ```
 
-### Step 3.3 — Update Key Vault With New ArgoCD Password
+### Step 3.3 — Update IPs in the Repository
+
+The ArgoCD and Ingress IPs will be different on every fresh deploy. Update them:
 
 ```bash
-az keyvault secret set \
-  --vault-name kv-gitops-project \
-  --name argocd-admin-password \
-  --value "<NEW_ARGOCD_PASSWORD>"
+# Update cd-pipeline.yml ARGOCD_SERVER variable with new ArgoCD IP
+# Update cd-pipeline.yml INGRESS_IP in the DAST stage with new Ingress IP
+# Update k8s/ingress/ingress.yaml: replace the nip.io hostname with <new-ingress-ip>.nip.io
+
+git add azure-pipelines/cd-pipeline.yml k8s/ingress/ingress.yaml
+git commit -m "config: update IPs after cluster rebuild"
+git push origin main
 ```
 
-> Do not store the new password anywhere except Key Vault.
-> Do not paste it into chat, email, or a document.
+ArgoCD will automatically sync the updated manifests and deploy all four microservices.
 
-### Step 3.4 — Reconnect GitHub Repository to ArgoCD
+### Step 3.4 — Re-register the Pipeline Agent
+
+SSH into the agent VM (its IP is in Terraform output `agent_public_ip`) and re-register:
 
 ```bash
-ARGOCD_IP=$(kubectl get svc argocd-server -n argocd \
-  -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-
-argocd login $ARGOCD_IP \
-  --username admin \
-  --password "<NEW_ARGOCD_PASSWORD>" \
-  --grpc-web
-
-# Fetch GitHub PAT from Key Vault
-GITHUB_PAT=$(az keyvault secret show \
-  --vault-name kv-gitops-project \
-  --name github-pat \
-  --query value -o tsv)
-
-argocd repo add https://github.com/Ayooluwabami/cicd-azure-gitops-aks.git \
-  --username Ayooluwabami \
-  --password "$GITHUB_PAT"
+ssh azureuser@<AGENT_PUBLIC_IP>
+az login
+az aks get-credentials --resource-group rg-gitops-project --name aks-gitops-project
+cd ~/agent
+./config.sh --url https://dev.azure.com/gitops-cicd-org --auth pat \
+  --token <AZDO_PAT> --pool Default --agent vm-devops-agent \
+  --unattended --acceptTeeEula
+sudo ./svc.sh install azureuser && sudo ./svc.sh start
 ```
 
-### Step 3.5 — Deploy ArgoCD Project and Application
+### Step 3.5 — Verify Full Recovery
 
 ```bash
-kubectl apply -f argocd/project.yaml
-kubectl apply -f argocd/application.yaml
-```
-
-ArgoCD will now pull all manifests from GitHub and apply them — including the namespace,
-RBAC, NetworkPolicies, ResourceQuota, and all three deployments.
-
-### Step 3.6 — Verify Full Recovery
-
-```bash
-# All pods should be Running within 5 minutes of the ArgoCD sync
+# All 8 pods should be Running (2 replicas × 4 services)
 kubectl get pods -n microservices
 
-# Get the new external IPs (they change on cluster rebuild)
-kubectl get svc -n microservices
+# Get the new Ingress IP
+INGRESS_IP=$(kubectl get svc ingress-nginx-controller -n ingress-nginx \
+  -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 
-# Test each service
-curl http://<PYTHON_APP_IP>/health
-curl http://<NODEJS_APP_IP>/health
-curl http://<DOTNET_APP_IP>/health
+# Test each service via Ingress
+curl -k https://${INGRESS_IP}.nip.io/health          # frontend (200 = HTML)
+curl -k https://${INGRESS_IP}.nip.io/api/students    # python-app
+curl -k https://${INGRESS_IP}.nip.io/api/courses     # nodejs-app
+curl -k https://${INGRESS_IP}.nip.io/api/reports     # dotnet-app
 ```
 
-Expected response from each: `{"status": "healthy"}`
+> **Note on ArgoCD login after rebuild:** Use `--grpc-web --insecure` flags — the cluster uses a self-signed certificate:
+> ```bash
+> argocd login <ARGOCD_IP> --username admin \
+>   --password <TF_VAR_argocd_admin_password> \
+>   --grpc-web --insecure
+> ```
 
 ---
 

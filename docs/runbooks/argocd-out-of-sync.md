@@ -28,9 +28,10 @@ ARGOCD_IP=$(kubectl get svc argocd-server -n argocd \
 argocd login $ARGOCD_IP \
   --username admin \
   --password "$(az keyvault secret show --vault-name kv-gitops-project --name argocd-admin-password --query value -o tsv)" \
-  --grpc-web
+  --grpc-web \
+  --insecure
 
-argocd app get microservices-app
+argocd app get microservices-app --grpc-web --insecure --insecure
 ```
 
 Look at:
@@ -62,7 +63,7 @@ kubectl wait --for=condition=ready pod --all -n argocd --timeout=120s
 If ArgoCD is healthy but hasn't synced:
 
 ```bash
-argocd app sync microservices-app --force --prune --grpc-web
+argocd app sync microservices-app --force --prune --grpc-web --insecure
 ```
 
 Watch for sync errors in the output. Common errors:
@@ -79,7 +80,7 @@ Watch for sync errors in the output. Common errors:
 ## Step 4 — Check GitHub Repository Connectivity
 
 ```bash
-argocd repo list --grpc-web
+argocd repo list --grpc-web --insecure
 ```
 
 The status should show `Successful`. If it shows an error, the GitHub PAT may have expired:
@@ -117,7 +118,7 @@ Compare the image tag with the latest build in Azure DevOps. If the manifest sti
 ## Post-Resolution Verification
 
 ```bash
-argocd app get microservices-app --grpc-web
+argocd app get microservices-app --grpc-web --insecure
 # Health Status: Healthy
 # Sync Status: Synced
 

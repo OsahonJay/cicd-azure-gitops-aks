@@ -15,10 +15,10 @@
 | Azure Container Registry | Basic tier | $0.167/day | 1 | ~$5 |
 | Azure Key Vault | Standard (< 10k ops/month) | ~$0.03/10k ops | 1 | < $1 |
 | Azure Monitor / Log Analytics | 5 GB/day ingestion | $2.30/GB | 5 GB | ~$12 |
-| Public IP addresses | Standard LoadBalancer IPs | $0.005/hr ea. | 3 (Ingress + ArgoCD + Grafana) | ~$11 |
+| Public IP addresses | Standard LoadBalancer IPs | $0.005/hr ea. | 2 (Ingress + ArgoCD) | ~$7 |
 | Azure DevOps | Free tier (5 users, 1800 CI min/mo) | $0 | 1 | $0 |
 | Bandwidth egress | First 100 GB free | $0 | — | $0 |
-| **TOTAL (always-on)** | | | | **~$133/month** |
+| **TOTAL (always-on)** | | | | **~$129/month** |
 
 ---
 
