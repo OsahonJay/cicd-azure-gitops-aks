@@ -30,7 +30,7 @@
 | CS-3 | All Linux capabilities dropped | `capabilities.drop: ["ALL"]` | `k8s/deployments/*.yaml` | ✅ Implemented |
 | CS-4 | Privilege escalation blocked | `allowPrivilegeEscalation: false` | `k8s/deployments/*.yaml` | ✅ Implemented |
 | CS-5 | Seccomp profile applied | `seccompProfile.type: RuntimeDefault` | `k8s/deployments/*.yaml` | ✅ Implemented |
-| CS-6 | Container images scanned for CVEs before deployment | Trivy scans all images; pipeline blocks on CRITICAL/HIGH findings | `azure-pipelines/ci-pipeline.yml` — Trivy steps | ✅ Implemented |
+| CS-6 | Container images scanned for CVEs before deployment | Trivy scans all images (`--exit-code 0`); findings published as SARIF artifacts but do not block the build — results must be reviewed manually per run | `azure-pipelines/ci-pipeline.yml` — Trivy steps; artifacts: `trivy-*-results` | ⚠️ Implemented (non-blocking) |
 | CS-7 | Images use immutable tags | Build ID tags (`python-app:12345`) — never `latest` | `azure-pipelines/ci-pipeline.yml` — IMAGE_TAG variable | ✅ Implemented |
 
 ### Network Security
@@ -39,8 +39,9 @@
 |---------|-------------|----------------|-------------------|--------|
 | NS-1 | Default-deny network policy | All traffic denied unless explicitly allowed | `k8s/network-policies/default-deny-all.yaml` | ✅ Implemented |
 | NS-2 | Per-service ingress restricted to ingress-nginx and monitoring namespaces | `from.namespaceSelector` on each policy | `k8s/network-policies/*-netpol.yaml` | ✅ Implemented |
-| NS-3 | TLS enforced on public Ingress | `ssl-redirect: true`; cert-manager annotation | `k8s/ingress/ingress.yaml` | ✅ Implemented |
+| NS-3 | TLS enforced on public Ingress | `ssl-redirect: true`; cert-manager self-signed issuer; HTTPS at `https://<INGRESS-IP>.nip.io` | `k8s/ingress/ingress.yaml` | ✅ Implemented |
 | NS-4 | CORS restricted to known origin | `ALLOWED_ORIGIN` env var; no wildcard | `microservices/*/app.py`, `app.ts`, `Program.cs` | ✅ Implemented |
+| NS-5 | All public traffic routed through a single Ingress | NGINX Ingress controller is the only public entry point; individual services are ClusterIP | `k8s/ingress/ingress.yaml`, `k8s/services/*.yaml` | ✅ Implemented |
 
 ### CI/CD Pipeline Security (OWASP CI/CD Top 10)
 
@@ -48,7 +49,7 @@
 |---------------|-------------|----------------|--------|
 | CICD-SEC-1: Insufficient flow control | Every PR and push must pass security gates before merge | Gitleaks → Checkov → Semgrep → Trivy; all gates hard-fail | ✅ Implemented |
 | CICD-SEC-2: Inadequate identity and access management | Pipeline credentials scoped to minimum operations | Service Principal: AcrPush + KV Get only | ✅ Implemented |
-| CICD-SEC-3: Dependency chain abuse | Third-party tools pinned to exact versions | `gitleaks:v8.18.4`, `checkov==3.2.0`, `semgrep==1.72.0`, `trivy:0.50.4` | ✅ Implemented |
+| CICD-SEC-3: Dependency chain abuse | Third-party tools pinned to exact versions | `gitleaks:v8.18.4`, `checkov==3.2.0`, `semgrep==1.72.0`, `trivy:0.70.0` | ✅ Implemented |
 | CICD-SEC-4: Poisoned pipeline execution | Secret scanning blocks committed credentials before build | Gitleaks stage before any build step | ✅ Implemented |
 | CICD-SEC-6: Insufficient credential hygiene | No credentials in YAML, environment variables, or logs | All secrets in Key Vault; `issecret=true` on pipeline variables | ✅ Implemented |
 

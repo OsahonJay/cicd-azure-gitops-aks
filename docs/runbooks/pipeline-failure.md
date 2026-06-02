@@ -90,17 +90,20 @@ Do not suppress findings without understanding them. If the finding is valid, fi
 - The most common cause is a dependency that cannot be installed (e.g. a PyPI package that does not support ARM64)
 - Fix the `requirements.txt` or `Dockerfile` and push a new commit
 
-**Trivy found CRITICAL/HIGH CVEs:**
+**Trivy CVE findings (non-blocking):**
 
+Trivy runs with `--exit-code 0` — it does **not** fail the pipeline. Findings are published as SARIF artifacts (`trivy-*-results`). Review them after each run via **Pipelines → Run → Artifacts**.
+
+To reproduce locally:
 ```bash
-# Reproduce locally (requires Trivy installed)
-trivy image --severity CRITICAL,HIGH python-app:<FAILED_BUILD_TAG>
+trivy image --severity CRITICAL,HIGH --ignore-unfixed \
+  acrgitopsproject.azurecr.io/python-app:<TAG>
 ```
 
-Options:
+Options to address findings:
 1. Update the base image in the Dockerfile to a newer version with the CVE patched
-2. If the CVE is in an application dependency, update `requirements.txt` / `package.json` / `.csproj`
-3. If the CVE affects a package your code does not use (false positive for your use case), add a Trivy ignore rule — document why
+2. Update the application dependency in `requirements.txt` / `package.json` / `.csproj`
+3. If the CVE affects a package your code does not use, add a `.trivyignore` file with justification
 
 **ACR push failed (authentication):**
 

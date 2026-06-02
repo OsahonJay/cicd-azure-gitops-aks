@@ -86,14 +86,15 @@
 
 | ID | Entry Point | Accessible By | Current Control |
 |----|-------------|---------------|-----------------|
-| EP-1 | Python-app LoadBalancer IP:80 | Entire Internet | None (no WAF, no rate limit) |
-| EP-2 | Node.js-app LoadBalancer IP:80 | Entire Internet | None |
-| EP-3 | .NET-app LoadBalancer IP:80 | Entire Internet | None |
-| EP-4 | ArgoCD UI LoadBalancer IP:443 | Entire Internet | Password auth only |
-| EP-5 | GitHub repository | Authenticated GitHub users | Branch protection + PR review |
-| EP-6 | Azure DevOps portal | Authenticated DevOps users | AAD + MFA (assumed) |
-| EP-7 | AKS API server | kubectl / ArgoCD / CI pipeline | K8s RBAC + AAD integration |
-| EP-8 | Azure Key Vault | Service Principal / Managed Identity | Azure RBAC |
+| EP-1 | NGINX Ingress `https://<IP>.nip.io/api/students` | Entire Internet | TLS (self-signed); API key required for writes (`X-API-Key` header) |
+| EP-2 | NGINX Ingress `https://<IP>.nip.io/api/courses` | Entire Internet | TLS (self-signed); API key required for writes |
+| EP-3 | NGINX Ingress `https://<IP>.nip.io/api/reports` | Entire Internet | TLS (self-signed); read-only reporting service |
+| EP-4 | NGINX Ingress `https://<IP>.nip.io/` | Entire Internet | TLS (self-signed); React SPA (static assets) |
+| EP-5 | ArgoCD UI LoadBalancer IP:80/443 | Entire Internet | Password auth; self-signed cert |
+| EP-6 | GitHub repository | Authenticated GitHub users | Branch protection + PR review |
+| EP-7 | Azure DevOps portal | Authenticated DevOps users | AAD + MFA (assumed) |
+| EP-8 | AKS API server | kubectl / ArgoCD / CI pipeline | K8s RBAC + AAD integration |
+| EP-9 | Azure Key Vault | Service Principal / Managed Identity | Azure RBAC |
 
 ---
 
@@ -103,7 +104,7 @@
 
 | ID | Threat | Attack Scenario | Likelihood | Impact | Mitigation | Owner | Verification |
 |----|--------|-----------------|------------|--------|------------|-------|--------------|
-| S-1 | ArgoCD server spoofed in CD pipeline | MITM between pipeline runner and ArgoCD LB IP; pipeline sends admin password to attacker | Low | Critical | Removed `--insecure`; using `--grpc-web`; add TLS cert check when production cert is provisioned | Verify pipeline YAML does not contain `--insecure` |
+| S-1 | ArgoCD server spoofed in CD pipeline | MITM between pipeline runner and ArgoCD LB IP; pipeline sends admin password to attacker | Low | Critical | Using `--grpc-web --insecure`; cluster uses a self-signed cert so certificate verification is disabled — acceptable for academic project; in production: provision a CA-signed cert and remove `--insecure` | Verify ArgoCD IP in `cd-pipeline.yml` matches actual LoadBalancer IP |
 | S-2 | Container image substitution in ACR | Attacker with ACR write access replaces `python-app:1234` with malicious image | Very Low | Critical | Images pushed only via CI pipeline Service Principal; Trivy scan before push; immutable build-ID tags | Confirm ACR has no other write principals; review ACR access logs |
 | S-3 | Pipeline bot impersonation | Leaked GitHub PAT allows attacker to push manifest changes as the pipeline bot | Low | High | PAT stored in Key Vault; access logged; PAT has minimum required scope (repo write only) | Review Key Vault access log; confirm PAT scope |
 
@@ -135,7 +136,7 @@
 | I-1 | Secrets leaked in pipeline logs | Azure DevOps accidentally prints a masked variable (e.g., via `set -x` in a bash step) | Low | Critical | Key Vault secrets are never echoed; no `set -x` in pipeline scripts; Azure DevOps log masking active | Review all pipeline steps for `set -x`; verify Key Vault vars are masked in a test run |
 | I-2 | ArgoCD UI exposes cluster topology | Anyone who reaches the ArgoCD LoadBalancer IP and bruteforces the admin password sees all deployed services, images, and namespaces | Medium | Medium | Admin password is strong and stored in Key Vault; no public documentation of ArgoCD IP | Rotate default password; verify ArgoCD IP is not in README or docs |
 | I-3 | Application logs contain sensitive request data | HTTP request logs inadvertently capture query parameters or headers | Low | Low | Current microservices do not log request bodies; no PII in this demo application | Review app logging code before adding real data |
-| I-4 | Container image layers expose build secrets | `docker build` caches secrets in an intermediate layer | Low | Medium | Multi-stage builds used; no `ARG` or `ENV` secrets in any Dockerfile | `docker history <image>` to verify no secrets in layers |
+| I-4 | Container image layers expose build secrets | `docker build` caches secrets in an intermediate layer | Low | Medium | Multi-stage builds used; `VITE_API_KEY` build arg is embedded in the frontend image (visible in browser JS bundle — acceptable for demo; in production use a BFF proxy) | `docker history <image>` to verify no Azure credentials in layers; `VITE_API_KEY` in the bundle is an accepted trade-off documented here |
 
 ---
 

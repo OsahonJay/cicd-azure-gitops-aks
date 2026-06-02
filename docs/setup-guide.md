@@ -803,51 +803,66 @@ kubectl get pods -n monitoring --watch
 
 All pods should reach `Running` status within 3–5 minutes.
 
-### Step 9.4 — Get the Grafana External IP
+### Step 9.4 — Access Grafana via Port-Forward
+
+Grafana is deployed as `ClusterIP` (no public IP). Run on your **local machine**:
 
 ```bash
-kubectl get svc kube-prometheus-stack-grafana -n monitoring
+kubectl port-forward svc/kube-prometheus-stack-grafana 3000:80 -n monitoring
 ```
 
-Open `http://<GRAFANA_IP>` in a browser. Default credentials: `admin` / `admin`.
+Open `http://localhost:3000`. Log in with `admin` / `<TF_VAR_grafana_admin_password>`.
+
+If login fails, reset the password directly:
+
+```bash
+kubectl exec -n monitoring \
+  $(kubectl get pod -n monitoring -l app.kubernetes.io/name=grafana -o name | head -1) \
+  -- grafana-cli admin reset-admin-password <YOUR_PASSWORD>
+```
 
 ---
 
 ## Phase 10 — Azure DevOps Setup
 
-### Step 10.0 — Update Hardcoded IPs in cd-pipeline.yml
+### Step 10.0 — Update IPs for Your Deployment
 
-By now you have two live IPs that are specific to your deployment:
-- **ArgoCD IP** — from Phase 5, Step 5.3
-- **Ingress IP** — from Phase 8, Step 8.2
+After `terraform apply`, get your actual IPs:
 
-The CD pipeline has these IPs hardcoded. **You must update them before the pipeline runs, or it will try to connect to the wrong servers.**
+```bash
+# ArgoCD IP
+kubectl get svc argocd-server -n argocd --no-headers | awk '{print $4}'
 
-Open `azure-pipelines/cd-pipeline.yml` and make two changes:
+# Ingress IP
+kubectl get svc ingress-nginx-controller -n ingress-nginx --no-headers | awk '{print $4}'
+```
 
-**1. ArgoCD Server IP** — in the `variables` block near the top of the file:
+Update **three files** with your actual IPs:
 
+**1. `azure-pipelines/cd-pipeline.yml`** — `ARGOCD_SERVER` variable:
 ```yaml
-# Change this to your actual ArgoCD LoadBalancer IP (from Phase 5, Step 5.3):
-ARGOCD_SERVER: "20.162.177.70"   # ← replace with your IP
+ARGOCD_SERVER: "<YOUR-ARGOCD-IP>"
 ```
 
-**2. Ingress IP** — in the DAST stage near the bottom of the file:
-
+**2. `azure-pipelines/cd-pipeline.yml`** — `INGRESS_IP` in the DAST stage:
 ```bash
-# Change this to your actual Ingress LoadBalancer IP (from Phase 8, Step 8.2):
-INGRESS_IP="4.158.73.97"   # ← replace with your IP
+INGRESS_IP="<YOUR-INGRESS-IP>"
 ```
 
-Commit and push both changes to your GitHub repository:
+**3. `k8s/ingress/ingress.yaml`** — replace the nip.io hostname in both `host:` and `tls.hosts`:
+```yaml
+# Replace 20.108.134.194.nip.io with <YOUR-INGRESS-IP>.nip.io
+```
+
+Commit and push:
 
 ```bash
-git add azure-pipelines/cd-pipeline.yml
+git add azure-pipelines/cd-pipeline.yml k8s/ingress/ingress.yaml
 git commit -m "config: update ArgoCD and Ingress IPs for this deployment"
 git push origin main
 ```
 
-> **Why before creating the pipelines?** Azure DevOps reads the YAML from your repository at run time. If the IPs are wrong when the pipeline first runs, Stage 3 (ArgoCD sync) fails because it cannot reach the server, and Stage 4 (DAST) scans the wrong target.
+> **Why before creating the pipelines?** The CD pipeline uses `ARGOCD_SERVER` to sync the application. If the IP is wrong, Stage 3 (ArgoCD sync) fails. The ingress hostname must match the TLS certificate subject.
 
 ### Step 10.1 — Create an Azure DevOps Organization and Project
 
@@ -859,53 +874,34 @@ git push origin main
 
 ### Step 10.2 — Create a Service Connection
 
-The service connection allows Azure DevOps pipelines to authenticate with Azure (to push Docker images to ACR and read Key Vault secrets).
-
 **GUI Steps:**
 1. In Azure DevOps, go to **Project Settings** (bottom-left gear icon)
 2. Click **Service connections** → **New service connection**
 3. Select **Azure Resource Manager** → **Next**
-4. Select **Service principal (automatic)** → **Next**
-5. Set the scope to your subscription
-6. Name it exactly: `AZURE_SERVICE_CONNECTION`
-7. Check **Grant access permission to all pipelines**
-8. Click **Save**
+4. **Identity type:** App registration (automatic)
+5. **Credential:** Workload identity federation
+6. **Scope level:** Subscription — select your subscription
+7. **Service Connection Name:** `AZURE_SERVICE_CONNECTION` (must be exact)
+8. Check **Grant access permission to all pipelines** → **Save**
 
 ### Step 10.3 — Grant the Service Principal Access to Key Vault
 
-The service connection creates a Service Principal in Azure AD. You need to grant it permission to read Key Vault secrets.
+After saving the service connection, click on it → **Manage App registration** (opens Azure portal). Copy the **Application (client) ID**.
 
-First find the Service Principal ID:
+> **Note:** The ID shown on the Azure DevOps service connection page is the connection ID, not the app registration ID. Always use **Manage App registration** to get the correct ID.
 
-**GUI Steps:**
-1. In Azure DevOps, go to **Project Settings → Service connections**
-2. Click `AZURE_SERVICE_CONNECTION` → **Manage Service Principal**
-3. Note the **Application (client) ID**
-
-Then grant Key Vault access via CLI:
+Find the correct app ID via CLI if needed:
 
 ```bash
-SP_CLIENT_ID="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"   # From above
-
-az keyvault set-policy \
-  --name kv-gitops-project \
-  --spn "${SP_CLIENT_ID}" \
-  --secret-permissions get list
+az ad app list --query "[?contains(displayName, 'gitops-cicd')].{name:displayName, appId:appId}" -o table
 ```
 
-Expected output:
-```json
-{
-  "properties": {
-    "accessPolicies": [
-      {
-        "permissions": {
-          "secrets": ["get", "list"]
-        }
-      }
-    ]
-  }
-}
+Grant Key Vault access:
+
+```bash
+az keyvault set-policy -n kv-gitops-project \
+  --spn "<APP-ID-FROM-ABOVE>" \
+  --secret-permissions get list
 ```
 
 ### Step 10.4 — Create the CI Pipeline
@@ -1023,27 +1019,26 @@ The agent needs a PAT to authenticate with Azure DevOps.
 
 ### Step 11.5 — Download and Configure the Agent
 
-Still inside the SSH session on the agent VM:
+Still inside the SSH session on the agent VM. First, configure kubectl access:
 
 ```bash
-# Create agent directory
-mkdir /home/azagent/agent && cd /home/azagent/agent
+az login
+az account set --subscription "<YOUR_SUBSCRIPTION_ID>"
+az aks get-credentials --resource-group rg-gitops-project --name aks-gitops-project
+kubectl get nodes   # confirm 3 Ready nodes
+```
 
-# Download the agent (get latest URL from:
-# https://github.com/microsoft/azure-pipelines-agent/releases)
-# Example for 3.x on ARM64:
-wget https://vstsagentpackage.azureedge.net/agent/3.248.0/vsts-agent-linux-arm64-3.248.0.tar.gz
-tar zxvf vsts-agent-linux-arm64-3.248.0.tar.gz
+Then download and register the agent:
 
-# Configure the agent
-./config.sh \
-  --url https://dev.azure.com/gitops-cicd-org \
-  --auth pat \
-  --token <YOUR_PAT_FROM_STEP_11.4> \
-  --pool Default \
-  --agent ado-pipeline-agent \
-  --unattended \
-  --acceptTeeEula
+```bash
+mkdir ~/agent && cd ~/agent
+
+# Download from the official Azure DevOps agent CDN (not GitHub releases)
+wget https://download.agent.dev.azure.com/agent/4.273.0/vsts-agent-linux-arm64-4.273.0.tar.gz
+tar zxvf vsts-agent-linux-arm64-4.273.0.tar.gz
+
+# Configure (run as a single line — do not use backslash line breaks in SSH)
+./config.sh --url https://dev.azure.com/gitops-cicd-org --auth pat --token <YOUR_PAT_FROM_STEP_11.4> --pool Default --agent vm-devops-agent --unattended --acceptTeeEula
 ```
 
 Expected output:
@@ -1051,28 +1046,24 @@ Expected output:
 >> Connect:
 Connecting to the server...
 >> Register Agent:
-Updating agent settings file...
 Settings Saved.
 ```
+
+> **Note:** Download from `download.agent.dev.azure.com` — the GitHub releases URL returns 404 for ARM64 packages.
 
 ### Step 11.6 — Run the Agent as a Service
 
 ```bash
-sudo ./svc.sh install azagent
+sudo ./svc.sh install azureuser
 sudo ./svc.sh start
 sudo ./svc.sh status
 ```
 
-Expected output:
-```
-● vsts.agent.gitops-cicd-org.Default.ado-pipeline-agent.service
-     Active: active (running) since ...
-```
+Expected: `Active: active (running)`
 
-Verify in Azure DevOps **GUI**:
-1. Go to **Organization Settings → Agent pools → Default**
-2. Click **Agents** tab
-3. You should see `ado-pipeline-agent` with status **Online**
+Verify in Azure DevOps:
+1. **Organization Settings → Agent pools → Default → Agents**
+2. `vm-devops-agent` should show status **Online**
 
 ---
 
@@ -1096,15 +1087,18 @@ git push origin main
 **GUI Steps:**
 1. In Azure DevOps, go to **Pipelines**
 2. Click the CI pipeline run that just started
-3. You should see these stages:
+3. You should see these stages complete:
    - Gate 1 — Secret Scanning (Gitleaks) ✅
    - Gate 2 — IaC Scanning (Checkov) ✅
    - Gate 3 — SAST (Semgrep) ✅
    - Build · Scan · Push — python-app ✅
    - Build · Scan · Push — nodejs-app ✅
    - Build · Scan · Push — dotnet-app ✅
+   - Build · Scan · Push — frontend ✅
 
 Total run time: approximately 8–12 minutes.
+
+> **Note:** Trivy CVE scans run with `--exit-code 0` (non-blocking). Findings are published as SARIF artifacts but do not fail the build. Review the `trivy-*-results` artifacts after each run.
 
 ### Step 12.3 — Monitor the CD Pipeline
 
