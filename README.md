@@ -316,5 +316,4 @@ Full cost breakdown: [docs/cost-estimate.md](docs/cost-estimate.md)
 
 ## Related
 
-- [Ayobami Edun's Medium post](https://medium.com/@ayobamiedun) — detailed technical walkthrough of the full pipeline
-- [Live project repository (group)](https://github.com/Ayooluwabami/cicd-azure-gitops-aks)
+- [Osahon's Medium post]((https://medium.com/p/74111f2f62dc) — detailed technical walkthrough of the full pipeline
