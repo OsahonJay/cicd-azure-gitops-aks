@@ -30,3 +30,5 @@ service-endpoint.json
 
 docs/architecture-diagram.png
 
+*.tfstate
+*.tfstate.backup
