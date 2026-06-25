@@ -26,7 +26,7 @@ terraform {
 
   backend "azurerm" {
     resource_group_name  = "rg-tfstate"
-    storage_account_name = "stgitopsstate01"
+    storage_account_name = "stgitopsstate02"
     container_name       = "tfstate"
     key                  = "cicd-gitops-aks/terraform.tfstate"
   }
